@@ -1,0 +1,57 @@
+# Android Sync Configuration
+# Copy this file to ~/.config/android-sync/config.toml
+
+[general]
+# Backblaze B2 bucket name
+bucket = "my-backup-bucket"
+
+# Directory for log files
+log_dir = "/data/data/com.termux/files/home/logs/android-sync"
+
+# Days to keep log files (0 to disable cleanup)
+log_retention_days = 7
+
+# Number of parallel transfers (default: 4)
+transfers = 4
+
+[keystore]
+# Names of keys stored in termux-keystore
+# Store your B2 credentials with:
+#   termux-keystore set b2-key-id
+#   termux-keystore set b2-app-key
+b2_key_id = "b2-key-id"
+b2_app_key = "b2-app-key"
+
+# Sync profiles define what to backup and where
+[profiles.photos]
+sources = [
+    "/storage/emulated/0/DCIM/Camera",
+    "/storage/emulated/0/Pictures",
+]
+destination = "photos"
+exclude = [
+    "*.tmp",
+    ".thumbnails",
+    "*.pending",
+]
+# Mark removed files as hidden in B2 (default: true)
+track_removals = true
+
+[profiles.documents]
+sources = ["/storage/emulated/0/Documents"]
+destination = "documents"
+exclude = ["*.bak", "~$*"]
+
+[profiles.downloads]
+sources = ["/storage/emulated/0/Download"]
+destination = "downloads"
+exclude = ["*.tmp", "*.part", "*.crdownload"]
+
+# Schedules group profiles for batch execution
+[schedules.daily]
+# Run all profiles daily
+profiles = ["photos", "documents", "downloads"]
+
+[schedules.hourly]
+# Run photos more frequently
+profiles = ["photos"]
