@@ -10,9 +10,11 @@ import pytest
 from android_sync.config import Profile
 from android_sync.keystore import B2Credentials
 from android_sync.sync import (
+    _b2_remote,
     _build_rclone_copy_cmd,
     _detect_removed_files,
     _list_local_files,
+    _rclone_env,
     _should_exclude,
     sync_profile,
 )
@@ -34,12 +36,31 @@ def profile():
     )
 
 
+class TestB2Remote:
+    def test_builds_remote_string(self):
+        remote = _b2_remote("my-bucket", "photos/Camera")
+        assert remote == ":b2:my-bucket/photos/Camera"
+
+
+class TestRcloneEnv:
+    def test_sets_credentials_in_env(self, credentials):
+        env = _rclone_env(credentials)
+        assert env["RCLONE_B2_ACCOUNT"] == "test-key-id"
+        assert env["RCLONE_B2_KEY"] == "test-app-key"
+
+    def test_preserves_existing_env(self, credentials):
+        import os
+
+        env = _rclone_env(credentials)
+        # Should contain PATH and other system env vars
+        assert "PATH" in env or os.name == "nt"
+
+
 class TestBuildRcloneCopyCmd:
-    def test_basic_command(self, credentials):
+    def test_basic_command(self):
         cmd = _build_rclone_copy_cmd(
             source="/storage/DCIM",
-            dest="b2:bucket/photos",
-            credentials=credentials,
+            dest=":b2,account=key,key=secret:bucket/photos",
             exclude=[],
             transfers=4,
             dry_run=False,
@@ -48,20 +69,15 @@ class TestBuildRcloneCopyCmd:
         assert cmd[0] == "rclone"
         assert cmd[1] == "copy"
         assert cmd[2] == "/storage/DCIM"
-        assert cmd[3] == "b2:bucket/photos"
-        assert "--b2-account" in cmd
-        assert "test-key-id" in cmd
-        assert "--b2-key" in cmd
-        assert "test-app-key" in cmd
+        assert cmd[3] == ":b2,account=key,key=secret:bucket/photos"
         assert "--transfers" in cmd
         assert "4" in cmd
         assert "--dry-run" not in cmd
 
-    def test_with_exclude_patterns(self, credentials):
+    def test_with_exclude_patterns(self):
         cmd = _build_rclone_copy_cmd(
             source="/src",
-            dest="b2:bucket/dest",
-            credentials=credentials,
+            dest=":b2,account=key,key=secret:bucket/dest",
             exclude=["*.tmp", "*.bak"],
             transfers=2,
             dry_run=False,
@@ -73,11 +89,10 @@ class TestBuildRcloneCopyCmd:
         assert cmd[exclude_indices[0] + 1] == "*.tmp"
         assert cmd[exclude_indices[1] + 1] == "*.bak"
 
-    def test_dry_run_flag(self, credentials):
+    def test_dry_run_flag(self):
         cmd = _build_rclone_copy_cmd(
             source="/src",
-            dest="b2:bucket/dest",
-            credentials=credentials,
+            dest=":b2,account=key,key=secret:bucket/dest",
             exclude=[],
             transfers=4,
             dry_run=True,

@@ -15,6 +15,31 @@ class SyncError(Exception):
     """Error during sync operation."""
 
 
+def _b2_remote(bucket: str, path: str) -> str:
+    """Build a B2 remote string.
+
+    Returns format: :b2:bucket/path
+    Credentials are passed via environment variables to avoid leaking in logs/process list.
+    """
+    return f":b2:{bucket}/{path}"
+
+
+def _rclone_env(credentials: B2Credentials) -> dict[str, str]:
+    """Build environment variables for rclone with B2 credentials.
+
+    Using env vars prevents credentials from appearing in:
+    - Process list (ps aux)
+    - Shell history
+    - Log files
+    """
+    import os
+
+    env = os.environ.copy()
+    env["RCLONE_B2_ACCOUNT"] = credentials.key_id
+    env["RCLONE_B2_KEY"] = credentials.app_key
+    return env
+
+
 @dataclass
 class SyncResult:
     """Result of a sync operation."""
@@ -50,6 +75,7 @@ def sync_profile(
 
     total_transferred = 0
     total_bytes = 0
+    env = _rclone_env(credentials)
 
     for source in profile.sources:
         source_path = Path(source)
@@ -60,12 +86,11 @@ def sync_profile(
         # Determine relative path structure in bucket
         # e.g., /storage/emulated/0/DCIM/Camera -> bucket/photos/DCIM/Camera
         relative_dest = f"{profile.destination}/{source_path.name}"
-        dest = f"b2:{bucket}/{relative_dest}"
+        dest = _b2_remote(bucket, relative_dest)
 
         cmd = _build_rclone_copy_cmd(
             source=source,
             dest=dest,
-            credentials=credentials,
             exclude=profile.exclude,
             transfers=transfers,
             dry_run=dry_run,
@@ -79,6 +104,7 @@ def sync_profile(
                 capture_output=True,
                 text=True,
                 check=True,
+                env=env,
             )
             logger.debug("rclone output: %s", result.stdout)
 
@@ -126,7 +152,6 @@ def sync_profile(
 def _build_rclone_copy_cmd(
     source: str,
     dest: str,
-    credentials: B2Credentials,
     exclude: list[str],
     transfers: int,
     dry_run: bool,
@@ -137,10 +162,6 @@ def _build_rclone_copy_cmd(
         "copy",
         source,
         dest,
-        "--b2-account",
-        credentials.key_id,
-        "--b2-key",
-        credentials.app_key,
         "--transfers",
         str(transfers),
         "--stats-one-line",
@@ -181,32 +202,29 @@ def _list_remote_files(
 ) -> set[str]:
     """List all files in the remote destination."""
     remote_files: set[str] = set()
+    env = _rclone_env(credentials)
 
     for source in profile.sources:
         source_path = Path(source)
         relative_dest = f"{profile.destination}/{source_path.name}"
-        remote = f"b2:{bucket}/{relative_dest}"
+        remote = _b2_remote(bucket, relative_dest)
 
         cmd = [
             "rclone",
             "lsf",
             remote,
-            "--b2-account",
-            credentials.key_id,
-            "--b2-key",
-            credentials.app_key,
             "--recursive",
             "--files-only",
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
             for line in result.stdout.strip().splitlines():
                 if line:
                     # Store as relative path from destination
                     remote_files.add(f"{source_path.name}/{line}")
         except subprocess.CalledProcessError as e:
-            logger.warning("Failed to list remote files for %s: %s", remote, e.stderr)
+            logger.warning("Failed to list remote files for %s: %s", relative_dest, e.stderr)
 
     return remote_files
 
@@ -268,24 +286,21 @@ def _hide_removed_files(
         return []
 
     logger.info("Hiding %d removed files in B2", len(removed))
+    env = _rclone_env(credentials)
 
     hidden: list[str] = []
     for relative_path in removed:
-        remote_path = f"b2:{bucket}/{profile.destination}/{relative_path}"
+        remote_path = _b2_remote(bucket, f"{profile.destination}/{relative_path}")
 
         cmd = [
             "rclone",
             "backend",
             "hide",
             remote_path,
-            "--b2-account",
-            credentials.key_id,
-            "--b2-key",
-            credentials.app_key,
         ]
 
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
             logger.debug("Hidden: %s", relative_path)
             hidden.append(relative_path)
         except subprocess.CalledProcessError as e:
