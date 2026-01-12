@@ -19,9 +19,9 @@ Backup files from Android (Termux) to Backblaze B2 using rclone.
 - [Termux](https://termux.dev/) with [Termux:API](https://wiki.termux.com/wiki/Termux:API)
 - Backblaze B2 account
 
-## Installation
+## Installation (Termux)
 
-### Quick setup (Termux)
+### Quick setup
 
 ```bash
 git clone https://github.com/user/android-sync.git
@@ -32,14 +32,10 @@ bash scripts/termux-init.sh
 ### Manual installation
 
 ```bash
-# Install dependencies in Termux
 pkg install python rclone termux-api
-pip install uv
-
-# Clone and install
 git clone https://github.com/user/android-sync.git
 cd android-sync
-uv sync
+pip install .
 ```
 
 ## Setup

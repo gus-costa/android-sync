@@ -10,11 +10,8 @@ pkg update -y
 echo "==> Installing dependencies..."
 pkg install -y python rclone termux-api
 
-echo "==> Installing uv..."
-pip install uv
-
 echo "==> Installing android-sync..."
-uv sync
+pip install .
 
 echo "==> Creating config directory..."
 mkdir -p ~/.config/android-sync
@@ -38,4 +35,4 @@ echo "  2. Edit your config:"
 echo "     nano ~/.config/android-sync/config.toml"
 echo ""
 echo "  3. Test with dry-run:"
-echo "     uv run android-sync run --all --dry-run"
+echo "     android-sync run --all --dry-run"
