@@ -8,7 +8,7 @@ echo "==> Updating package lists..."
 pkg update -y
 
 echo "==> Installing dependencies..."
-pkg install -y python rclone termux-api
+pkg install -y python rclone termux-api gnupg
 
 echo "==> Installing android-sync..."
 pip install .
@@ -19,20 +19,22 @@ mkdir -p ~/.config/android-sync
 if [ ! -f ~/.config/android-sync/config.toml ]; then
     cp config.example.toml ~/.config/android-sync/config.toml
     echo "==> Copied example config to ~/.config/android-sync/config.toml"
-    echo "    Edit this file with your settings before running."
 else
     echo "==> Config file already exists, skipping."
 fi
 
+echo ""
 echo "==> Setup complete!"
 echo ""
 echo "Next steps:"
-echo "  1. Store your B2 credentials:"
-echo "     termux-keystore set b2-key-id"
-echo "     termux-keystore set b2-app-key"
 echo ""
-echo "  2. Edit your config:"
+echo "  1. Get your B2 credentials from https://www.backblaze.com/"
+echo ""
+echo "  2. Initialize credentials (generates keystore key + encrypts secrets):"
+echo "     android-sync setup"
+echo ""
+echo "  3. Edit your config:"
 echo "     nano ~/.config/android-sync/config.toml"
 echo ""
-echo "  3. Test with dry-run:"
+echo "  4. Test with dry-run:"
 echo "     android-sync run --all --dry-run"

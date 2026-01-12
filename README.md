@@ -7,7 +7,7 @@ Backup files from Android (Termux) to Backblaze B2 using rclone.
 - One-way sync from device to B2 (no deletes, preserves versions)
 - Configurable sync profiles for different file types
 - Schedules to group profiles for batch execution
-- Secure credential storage via termux-keystore
+- Secure credential storage using Android Keystore + GPG
 - Automatic detection and hiding of removed files
 - Dry-run mode for previewing changes
 - File and stdout logging with retention management
@@ -17,6 +17,7 @@ Backup files from Android (Termux) to Backblaze B2 using rclone.
 - Python 3.11+
 - [rclone](https://rclone.org/) installed and in PATH
 - [Termux](https://termux.dev/) with [Termux:API](https://wiki.termux.com/wiki/Termux:API)
+- GPG (gnupg)
 - Backblaze B2 account
 
 ## Installation (Termux)
@@ -32,7 +33,7 @@ bash scripts/termux-init.sh
 ### Manual installation
 
 ```bash
-pkg install python rclone termux-api
+pkg install python rclone termux-api gnupg
 git clone https://github.com/user/android-sync.git
 cd android-sync
 pip install .
@@ -40,23 +41,25 @@ pip install .
 
 ## Setup
 
-### 1. Store B2 credentials in keystore
+### 1. Initialize credentials
+
+The setup command generates a signing key in Android Keystore and encrypts your B2 credentials:
 
 ```bash
-# Get your B2 credentials from https://www.backblaze.com/
-termux-keystore set b2-key-id
-# Enter your B2 application key ID
-
-termux-keystore set b2-app-key
-# Enter your B2 application key
+android-sync setup
+# Prompts for Key ID and Application Key interactively
 ```
+
+This creates:
+- A non-exportable RSA key in Android Keystore (`android-sync`)
+- An encrypted secrets file at `~/.local/share/android-sync/secrets.gpg`
 
 ### 2. Create configuration
 
 ```bash
 mkdir -p ~/.config/android-sync
 cp config.example.toml ~/.config/android-sync/config.toml
-# Edit config.toml with your settings
+# Edit config.toml with your settings (bucket name, profiles, etc.)
 ```
 
 ### 3. Test with dry-run
@@ -103,14 +106,7 @@ bucket = "my-backup-bucket"      # B2 bucket name
 log_dir = "/path/to/logs"        # Log directory
 log_retention_days = 30          # Days to keep logs
 transfers = 4                    # Parallel transfers
-```
-
-### Keystore Keys
-
-```toml
-[keystore]
-b2_key_id = "b2-key-id"          # Keystore key name for B2 key ID
-b2_app_key = "b2-app-key"        # Keystore key name for B2 app key
+secrets_file = "/path/to/secrets.gpg"  # Optional, defaults to ~/.local/share/android-sync/secrets.gpg
 ```
 
 ### Profiles
@@ -139,6 +135,16 @@ profiles = ["photos", "documents"]
 [schedules.hourly]
 profiles = ["photos"]
 ```
+
+## Security Model
+
+Credentials are protected using a hardware-backed key derivation scheme:
+
+1. **Android Keystore** stores a non-exportable RSA signing key
+2. A fixed message is signed to derive a deterministic passphrase
+3. The passphrase encrypts/decrypts a GPG secrets file containing B2 credentials
+
+This provides separation between the encryption key (in hardware) and encrypted data (on disk). The private key never leaves the Android Keystore.
 
 ## Scheduling with Termux
 

@@ -16,10 +16,7 @@ bucket = "my-bucket"
 log_dir = "/tmp/logs"
 log_retention_days = 14
 transfers = 2
-
-[keystore]
-b2_key_id = "my-key-id"
-b2_app_key = "my-app-key"
+secrets_file = "/path/to/secrets.gpg"
 
 [profiles.photos]
 sources = ["/storage/DCIM", "/storage/Pictures"]
@@ -56,9 +53,7 @@ class TestLoadConfig:
             assert config.log_dir == Path("/tmp/logs")
             assert config.log_retention_days == 14
             assert config.transfers == 2
-
-            assert config.keystore.b2_key_id == "my-key-id"
-            assert config.keystore.b2_app_key == "my-app-key"
+            assert config.secrets_file == Path("/path/to/secrets.gpg")
 
             assert "photos" in config.profiles
             assert "documents" in config.profiles
@@ -80,9 +75,8 @@ class TestLoadConfig:
 
     def test_missing_bucket(self):
         config = """\
-[keystore]
-b2_key_id = "key"
-b2_app_key = "secret"
+[general]
+log_dir = "/tmp"
 """
         path = write_config(config)
         try:
@@ -91,26 +85,10 @@ b2_app_key = "secret"
         finally:
             path.unlink()
 
-    def test_missing_keystore_credentials(self):
-        config = """\
-[general]
-bucket = "test"
-"""
-        path = write_config(config)
-        try:
-            with pytest.raises(ConfigError, match="keystore.b2_key_id"):
-                load_config(path)
-        finally:
-            path.unlink()
-
     def test_missing_profile_sources(self):
         config = """\
 [general]
 bucket = "test"
-
-[keystore]
-b2_key_id = "key"
-b2_app_key = "secret"
 
 [profiles.bad]
 destination = "dest"
@@ -126,10 +104,6 @@ destination = "dest"
         config = """\
 [general]
 bucket = "test"
-
-[keystore]
-b2_key_id = "key"
-b2_app_key = "secret"
 
 [profiles.photos]
 sources = ["/storage"]
@@ -161,15 +135,13 @@ profiles = ["nonexistent"]
         config = """\
 [general]
 bucket = "test"
-
-[keystore]
-b2_key_id = "key"
-b2_app_key = "secret"
 """
         path = write_config(config)
         try:
             cfg = load_config(path)
             assert cfg.log_retention_days == 7
             assert cfg.transfers == 4
+            # Default secrets file
+            assert cfg.secrets_file.name == "secrets.gpg"
         finally:
             path.unlink()

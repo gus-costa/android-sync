@@ -5,6 +5,10 @@
 # Backblaze B2 bucket name
 bucket = "my-backup-bucket"
 
+# Path to GPG-encrypted secrets file (default: ~/.local/share/android-sync/secrets.gpg)
+# The secrets file is device-specific and cannot be decrypted on other devices.
+# secrets_file = "/custom/path/secrets.gpg"
+
 # Directory for log files
 log_dir = "/data/data/com.termux/files/home/logs/android-sync"
 
@@ -13,14 +17,6 @@ log_retention_days = 7
 
 # Number of parallel transfers (default: 4)
 transfers = 4
-
-[keystore]
-# Names of keys stored in termux-keystore
-# Store your B2 credentials with:
-#   termux-keystore set b2-key-id
-#   termux-keystore set b2-app-key
-b2_key_id = "b2-key-id"
-b2_app_key = "b2-app-key"
 
 # Sync profiles define what to backup and where
 [profiles.photos]

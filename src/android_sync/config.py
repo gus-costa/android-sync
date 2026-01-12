@@ -4,13 +4,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
-@dataclass
-class KeystoreConfig:
-    """Keystore key names for B2 credentials."""
-
-    b2_key_id: str
-    b2_app_key: str
+DEFAULT_SECRETS_FILE = Path.home() / ".local" / "share" / "android-sync" / "secrets.gpg"
 
 
 @dataclass
@@ -39,7 +33,7 @@ class Config:
     bucket: str
     log_dir: Path
     log_retention_days: int
-    keystore: KeystoreConfig
+    secrets_file: Path
     profiles: dict[str, Profile]
     schedules: dict[str, Schedule]
     transfers: int = 4
@@ -66,22 +60,12 @@ def load_config(path: Path) -> Config:
 def _parse_config(data: dict) -> Config:
     """Parse and validate configuration data."""
     general = data.get("general", {})
-    keystore_data = data.get("keystore", {})
     profiles_data = data.get("profiles", {})
     schedules_data = data.get("schedules", {})
 
     # Validate required fields
     if "bucket" not in general:
         raise ConfigError("Missing required field: general.bucket")
-    if "b2_key_id" not in keystore_data:
-        raise ConfigError("Missing required field: keystore.b2_key_id")
-    if "b2_app_key" not in keystore_data:
-        raise ConfigError("Missing required field: keystore.b2_app_key")
-
-    keystore = KeystoreConfig(
-        b2_key_id=keystore_data["b2_key_id"],
-        b2_app_key=keystore_data["b2_app_key"],
-    )
 
     profiles = {}
     for name, profile_data in profiles_data.items():
@@ -115,11 +99,17 @@ def _parse_config(data: dict) -> Config:
             profiles=schedule_data["profiles"],
         )
 
+    secrets_file_str = general.get("secrets_file")
+    if secrets_file_str:
+        secrets_file = Path(secrets_file_str)
+    else:
+        secrets_file = DEFAULT_SECRETS_FILE
+
     return Config(
         bucket=general["bucket"],
         log_dir=Path(general.get("log_dir", "/data/data/com.termux/files/home/logs")),
         log_retention_days=general.get("log_retention_days", 7),
-        keystore=keystore,
+        secrets_file=secrets_file,
         profiles=profiles,
         schedules=schedules,
         transfers=general.get("transfers", 4),
