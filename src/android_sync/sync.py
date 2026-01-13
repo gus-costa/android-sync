@@ -19,7 +19,6 @@ def _b2_remote(bucket: str, path: str) -> str:
     """Build a B2 remote string.
 
     Returns format: :b2:bucket/path
-    Credentials are passed via environment variables to avoid leaking in logs/process list.
     """
     return f":b2:{bucket}/{path}"
 
@@ -106,10 +105,10 @@ def sync_profile(
                 check=True,
                 env=env,
             )
-            logger.debug("rclone output: %s", result.stdout)
+            logger.debug("rclone output: %s", result.stderr)
 
             # Parse stats from output (simplified)
-            stats = _parse_rclone_stats(result.stdout)
+            stats = _parse_rclone_stats(result.stderr)
             total_transferred += stats.get("files", 0)
             total_bytes += stats.get("bytes", 0)
 

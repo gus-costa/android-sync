@@ -166,7 +166,7 @@ class TestSyncProfile:
     @patch("android_sync.sync._hide_removed_files")
     @patch("android_sync.sync.subprocess.run")
     def test_sync_success(self, mock_run, mock_hide, profile, credentials):
-        mock_run.return_value = MagicMock(stdout="Transferred: 5 files", returncode=0)
+        mock_run.return_value = MagicMock(stderr="Transferred: 5 files", returncode=0)
         mock_hide.return_value = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -207,7 +207,7 @@ class TestSyncProfile:
     def test_dry_run_detects_but_doesnt_hide(
         self, mock_run, mock_detect, profile, credentials
     ):
-        mock_run.return_value = MagicMock(stdout="", returncode=0)
+        mock_run.return_value = MagicMock(stderr="", returncode=0)
         mock_detect.return_value = ["removed/file.jpg"]
 
         with tempfile.TemporaryDirectory() as tmpdir:
