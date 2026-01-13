@@ -1,8 +1,10 @@
 """Sync logic using rclone for Backblaze B2."""
 
 import logging
+import re
 import subprocess
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import Profile
@@ -49,6 +51,9 @@ class SyncResult:
     bytes_transferred: int
     hidden_files: list[str]
     error: str | None = None
+    # For dry-run summaries
+    files_by_directory: dict[str, int] = field(default_factory=dict)
+    hidden_by_directory: dict[str, int] = field(default_factory=dict)
 
 
 def sync_profile(
@@ -74,6 +79,7 @@ def sync_profile(
 
     total_transferred = 0
     total_bytes = 0
+    all_dry_run_files: list[str] = []
     env = _rclone_env(credentials)
 
     for source in profile.sources:
@@ -107,10 +113,15 @@ def sync_profile(
             )
             logger.debug("rclone output: %s", result.stderr)
 
-            # Parse stats from output (simplified)
-            stats = _parse_rclone_stats(result.stderr)
-            total_transferred += stats.get("files", 0)
-            total_bytes += stats.get("bytes", 0)
+            if dry_run:
+                # Collect files for dry-run summary
+                dry_run_files = _parse_dry_run_files(result.stderr)
+                all_dry_run_files.extend(dry_run_files)
+            else:
+                # Parse stats from output (simplified)
+                stats = _parse_rclone_stats(result.stderr)
+                total_transferred += stats.get("files", 0)
+                total_bytes += stats.get("bytes", 0)
 
         except subprocess.CalledProcessError as e:
             logger.error("Sync failed for %s: %s", source, e.stderr)
@@ -125,19 +136,26 @@ def sync_profile(
 
     # Handle removed files
     hidden_files: list[str] = []
+    hidden_by_dir: dict[str, int] = {}
     if profile.track_removals and not dry_run:
         hidden_files = _hide_removed_files(profile, bucket, credentials)
     elif profile.track_removals and dry_run:
         hidden_files = _detect_removed_files(profile, bucket, credentials)
-        if hidden_files:
-            logger.info("Would hide %d removed files (dry-run)", len(hidden_files))
+        hidden_by_dir = _group_by_directory(hidden_files)
 
-    logger.info(
-        "Profile %s complete: %d files, %d bytes transferred",
-        profile.name,
-        total_transferred,
-        total_bytes,
-    )
+    # Show dry-run summary
+    files_by_dir: dict[str, int] = {}
+    if dry_run:
+        files_by_dir = _group_by_directory(all_dry_run_files)
+        total_transferred = len(all_dry_run_files)
+        _print_dry_run_summary(profile.name, files_by_dir, hidden_by_dir)
+    else:
+        logger.info(
+            "Profile %s complete: %d files, %d bytes transferred",
+            profile.name,
+            total_transferred,
+            total_bytes,
+        )
 
     return SyncResult(
         profile_name=profile.name,
@@ -145,6 +163,8 @@ def sync_profile(
         files_transferred=total_transferred,
         bytes_transferred=total_bytes,
         hidden_files=hidden_files,
+        files_by_directory=files_by_dir,
+        hidden_by_directory=hidden_by_dir,
     )
 
 
@@ -186,12 +206,84 @@ def _parse_rclone_stats(output: str) -> dict:
         if "Transferred:" in line:
             # Try to extract numbers (very basic parsing)
             parts = line.split()
-            for i, part in enumerate(parts):
+            for part in parts:
                 if part.isdigit():
                     stats["files"] = int(part)
                     break
 
     return stats
+
+
+def _parse_dry_run_files(output: str) -> list[str]:
+    """Extract file paths from rclone dry-run output.
+
+    rclone outputs lines like:
+    NOTICE: path/to/file.jpg: Skipped copy as --dry-run is set
+    """
+    files = []
+    # Match lines with "Skipped copy" or "Skipped update"
+    pattern = re.compile(r"NOTICE: (.+): Skipped (?:copy|update)")
+
+    for line in output.splitlines():
+        match = pattern.search(line)
+        if match:
+            files.append(match.group(1))
+
+    return files
+
+
+def _group_by_directory(files: list[str], depth: int = 1) -> dict[str, int]:
+    """Group files by their top-level directory.
+
+    Args:
+        files: List of file paths.
+        depth: Directory depth to group by (1 = top-level).
+
+    Returns:
+        Dict mapping directory name to file count.
+    """
+    counts: dict[str, int] = defaultdict(int)
+
+    for file_path in files:
+        parts = Path(file_path).parts
+        if len(parts) >= depth:
+            # Use the first N parts as the directory key
+            dir_key = str(Path(*parts[:depth]))
+        else:
+            dir_key = str(Path(*parts[:-1])) if len(parts) > 1 else "."
+        counts[dir_key] += 1
+
+    return dict(sorted(counts.items()))
+
+
+def _print_dry_run_summary(
+    profile_name: str,
+    files_by_dir: dict[str, int],
+    hidden_by_dir: dict[str, int],
+) -> None:
+    """Print a formatted dry-run summary."""
+    total_files = sum(files_by_dir.values())
+    total_hidden = sum(hidden_by_dir.values())
+
+    logger.info("=" * 50)
+    logger.info("Dry-run summary for profile '%s'", profile_name)
+    logger.info("=" * 50)
+
+    if total_files > 0:
+        logger.info("Files to transfer: %d", total_files)
+        for dir_name, count in files_by_dir.items():
+            logger.info("  %s: %d files", dir_name, count)
+    else:
+        logger.info("Files to transfer: 0 (already synced)")
+
+    if total_hidden > 0:
+        logger.info("Files to hide: %d", total_hidden)
+        for dir_name, count in hidden_by_dir.items():
+            logger.info("  %s: %d files", dir_name, count)
+    elif hidden_by_dir is not None:
+        logger.info("Files to hide: 0")
+
+    logger.info("=" * 50)
 
 
 def _list_remote_files(

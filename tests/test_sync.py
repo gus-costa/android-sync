@@ -13,7 +13,9 @@ from android_sync.sync import (
     _b2_remote,
     _build_rclone_copy_cmd,
     _detect_removed_files,
+    _group_by_directory,
     _list_local_files,
+    _parse_dry_run_files,
     _rclone_env,
     _should_exclude,
     sync_profile,
@@ -242,6 +244,64 @@ class TestSyncProfile:
 
             assert not result.success
             assert "connection failed" in result.error
+
+
+class TestParseDryRunFiles:
+    def test_parses_skipped_copy_lines(self):
+        output = """
+2024/01/15 10:00:00 NOTICE: DCIM/Camera/IMG_001.jpg: Skipped copy as --dry-run is set
+2024/01/15 10:00:00 NOTICE: DCIM/Camera/IMG_002.jpg: Skipped copy as --dry-run is set
+2024/01/15 10:00:00 INFO: Some other log line
+2024/01/15 10:00:00 NOTICE: Pictures/photo.png: Skipped copy as --dry-run is set
+"""
+        files = _parse_dry_run_files(output)
+
+        assert len(files) == 3
+        assert "DCIM/Camera/IMG_001.jpg" in files
+        assert "DCIM/Camera/IMG_002.jpg" in files
+        assert "Pictures/photo.png" in files
+
+    def test_parses_skipped_update_lines(self):
+        output = "2024/01/15 10:00:00 NOTICE: file.txt: Skipped update as --dry-run is set"
+        files = _parse_dry_run_files(output)
+
+        assert files == ["file.txt"]
+
+    def test_empty_output(self):
+        files = _parse_dry_run_files("")
+        assert files == []
+
+
+class TestGroupByDirectory:
+    def test_groups_by_top_level(self):
+        files = [
+            "DCIM/Camera/IMG_001.jpg",
+            "DCIM/Camera/IMG_002.jpg",
+            "DCIM/Screenshots/screen.png",
+            "Pictures/photo.jpg",
+        ]
+        grouped = _group_by_directory(files)
+
+        assert grouped == {"DCIM": 3, "Pictures": 1}
+
+    def test_groups_by_depth_2(self):
+        files = [
+            "DCIM/Camera/IMG_001.jpg",
+            "DCIM/Camera/IMG_002.jpg",
+            "DCIM/Screenshots/screen.png",
+        ]
+        grouped = _group_by_directory(files, depth=2)
+
+        assert grouped == {"DCIM/Camera": 2, "DCIM/Screenshots": 1}
+
+    def test_empty_list(self):
+        grouped = _group_by_directory([])
+        assert grouped == {}
+
+    def test_single_file_no_directory(self):
+        # A bare filename gets grouped under itself
+        grouped = _group_by_directory(["file.txt"])
+        assert grouped == {"file.txt": 1}
 
 
 class TestDetectRemovedFiles:
