@@ -77,8 +77,6 @@ def sync_profile(
     """
     logger.info("Syncing profile: %s", profile.name)
 
-    total_transferred = 0
-    total_bytes = 0
     all_dry_run_files: list[str] = []
     env = _rclone_env(credentials)
 
@@ -104,34 +102,36 @@ def sync_profile(
         logger.debug("Running: %s", " ".join(cmd))
 
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-                env=env,
-            )
-            logger.debug("rclone output: %s", result.stderr)
-
             if dry_run:
-                # Collect files for dry-run summary
+                # Capture output for dry-run summary
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    env=env,
+                )
                 dry_run_files = _parse_dry_run_files(result.stderr)
                 all_dry_run_files.extend(dry_run_files)
             else:
-                # Parse stats from output (simplified)
-                stats = _parse_rclone_stats(result.stderr)
-                total_transferred += stats.get("files", 0)
-                total_bytes += stats.get("bytes", 0)
+                # Show progress in real-time
+                subprocess.run(
+                    cmd,
+                    stderr=None,  # Let stderr go to terminal for progress
+                    check=True,
+                    env=env,
+                )
 
         except subprocess.CalledProcessError as e:
-            logger.error("Sync failed for %s: %s", source, e.stderr)
+            error_msg = e.stderr if e.stderr else str(e)
+            logger.error("Sync failed for %s: %s", source, error_msg)
             return SyncResult(
                 profile_name=profile.name,
                 success=False,
-                files_transferred=total_transferred,
-                bytes_transferred=total_bytes,
+                files_transferred=0,
+                bytes_transferred=0,
                 hidden_files=[],
-                error=e.stderr,
+                error=error_msg,
             )
 
     # Handle removed files
@@ -143,25 +143,21 @@ def sync_profile(
         hidden_files = _detect_removed_files(profile, bucket, credentials)
         hidden_by_dir = _group_by_directory(hidden_files)
 
-    # Show dry-run summary
+    # Show summary
     files_by_dir: dict[str, int] = {}
+    total_files = 0
     if dry_run:
         files_by_dir = _group_by_directory(all_dry_run_files)
-        total_transferred = len(all_dry_run_files)
+        total_files = len(all_dry_run_files)
         _print_dry_run_summary(profile.name, files_by_dir, hidden_by_dir)
     else:
-        logger.info(
-            "Profile %s complete: %d files, %d bytes transferred",
-            profile.name,
-            total_transferred,
-            total_bytes,
-        )
+        logger.info("Profile %s complete", profile.name)
 
     return SyncResult(
         profile_name=profile.name,
         success=True,
-        files_transferred=total_transferred,
-        bytes_transferred=total_bytes,
+        files_transferred=total_files,
+        bytes_transferred=0,
         hidden_files=hidden_files,
         files_by_directory=files_by_dir,
         hidden_by_directory=hidden_by_dir,
@@ -183,7 +179,6 @@ def _build_rclone_copy_cmd(
         dest,
         "--transfers",
         str(transfers),
-        "--stats-one-line",
         "-v",
     ]
 
@@ -192,26 +187,11 @@ def _build_rclone_copy_cmd(
 
     if dry_run:
         cmd.append("--dry-run")
+    else:
+        # Show progress bar for actual transfers
+        cmd.append("--progress")
 
     return cmd
-
-
-def _parse_rclone_stats(output: str) -> dict:
-    """Parse basic stats from rclone output."""
-    # This is simplified - rclone's JSON output would be more reliable
-    # but requires --use-json-log flag
-    stats = {"files": 0, "bytes": 0}
-
-    for line in output.splitlines():
-        if "Transferred:" in line:
-            # Try to extract numbers (very basic parsing)
-            parts = line.split()
-            for part in parts:
-                if part.isdigit():
-                    stats["files"] = int(part)
-                    break
-
-    return stats
 
 
 def _parse_dry_run_files(output: str) -> list[str]:
@@ -370,7 +350,11 @@ def _hide_removed_files(
     bucket: str,
     credentials: B2Credentials,
 ) -> list[str]:
-    """Hide files in B2 that no longer exist locally."""
+    """Hide files in B2 that no longer exist locally.
+
+    Uses rclone deletefile which on B2 creates a deletion marker,
+    effectively hiding the file while preserving version history.
+    """
     removed = _detect_removed_files(profile, bucket, credentials)
 
     if not removed:
@@ -385,8 +369,7 @@ def _hide_removed_files(
 
         cmd = [
             "rclone",
-            "backend",
-            "hide",
+            "deletefile",
             remote_path,
         ]
 
