@@ -77,7 +77,8 @@ def sync_profile(
     """
     logger.info("Syncing profile: %s", profile.name)
 
-    all_dry_run_files: list[str] = []
+    all_transfers: list[str] = []
+    all_deletes: list[str] = []
     env = _rclone_env(credentials)
 
     for source in profile.sources:
@@ -91,12 +92,13 @@ def sync_profile(
         relative_dest = f"{profile.destination}/{source_path.name}"
         dest = _b2_remote(bucket, relative_dest)
 
-        cmd = _build_rclone_copy_cmd(
+        cmd = _build_rclone_cmd(
             source=source,
             dest=dest,
             exclude=profile.exclude,
             transfers=transfers,
             dry_run=dry_run,
+            sync_deletes=profile.track_removals,
         )
 
         logger.debug("Running: %s", " ".join(cmd))
@@ -111,8 +113,9 @@ def sync_profile(
                     check=True,
                     env=env,
                 )
-                dry_run_files = _parse_dry_run_files(result.stderr)
-                all_dry_run_files.extend(dry_run_files)
+                transfers_list, deletes_list = _parse_dry_run_output(result.stderr)
+                all_transfers.extend(transfers_list)
+                all_deletes.extend(deletes_list)
             else:
                 # Show progress in real-time
                 subprocess.run(
@@ -134,21 +137,12 @@ def sync_profile(
                 error=error_msg,
             )
 
-    # Handle removed files
-    hidden_files: list[str] = []
-    hidden_by_dir: dict[str, int] = {}
-    if profile.track_removals and not dry_run:
-        hidden_files = _hide_removed_files(profile, bucket, credentials)
-    elif profile.track_removals and dry_run:
-        hidden_files = _detect_removed_files(profile, bucket, credentials)
-        hidden_by_dir = _group_by_directory(hidden_files)
-
     # Show summary
     files_by_dir: dict[str, int] = {}
-    total_files = 0
+    hidden_by_dir: dict[str, int] = {}
     if dry_run:
-        files_by_dir = _group_by_directory(all_dry_run_files)
-        total_files = len(all_dry_run_files)
+        files_by_dir = _group_by_directory(all_transfers)
+        hidden_by_dir = _group_by_directory(all_deletes)
         _print_dry_run_summary(profile.name, files_by_dir, hidden_by_dir)
     else:
         logger.info("Profile %s complete", profile.name)
@@ -156,25 +150,32 @@ def sync_profile(
     return SyncResult(
         profile_name=profile.name,
         success=True,
-        files_transferred=total_files,
+        files_transferred=len(all_transfers),
         bytes_transferred=0,
-        hidden_files=hidden_files,
+        hidden_files=all_deletes,
         files_by_directory=files_by_dir,
         hidden_by_directory=hidden_by_dir,
     )
 
 
-def _build_rclone_copy_cmd(
+def _build_rclone_cmd(
     source: str,
     dest: str,
     exclude: list[str],
     transfers: int,
     dry_run: bool,
+    sync_deletes: bool,
 ) -> list[str]:
-    """Build the rclone copy command."""
+    """Build the rclone command.
+
+    Args:
+        sync_deletes: If True, use 'sync' (deletes remote files not in source).
+                      If False, use 'copy' (only adds/updates, never deletes).
+    """
+    operation = "sync" if sync_deletes else "copy"
     cmd = [
         "rclone",
-        "copy",
+        operation,
         source,
         dest,
         "--transfers",
@@ -195,22 +196,32 @@ def _build_rclone_copy_cmd(
     return cmd
 
 
-def _parse_dry_run_files(output: str) -> list[str]:
+def _parse_dry_run_output(output: str) -> tuple[list[str], list[str]]:
     """Extract file paths from rclone dry-run output.
 
     rclone outputs lines like:
     NOTICE: path/to/file.jpg: Skipped copy as --dry-run is set
+    NOTICE: path/to/file.jpg: Skipped delete as --dry-run is set
+
+    Returns:
+        Tuple of (files_to_transfer, files_to_delete)
     """
-    files = []
-    # Match lines with "Skipped copy" or "Skipped update"
-    pattern = re.compile(r"NOTICE: (.+): Skipped (?:copy|update)")
+    transfers = []
+    deletes = []
+
+    transfer_pattern = re.compile(r"NOTICE: (.+): Skipped (?:copy|update)")
+    delete_pattern = re.compile(r"NOTICE: (.+): Skipped delete")
 
     for line in output.splitlines():
-        match = pattern.search(line)
+        match = transfer_pattern.search(line)
         if match:
-            files.append(match.group(1))
+            transfers.append(match.group(1))
+            continue
+        match = delete_pattern.search(line)
+        if match:
+            deletes.append(match.group(1))
 
-    return files
+    return transfers, deletes
 
 
 def _group_by_directory(files: list[str], depth: int = 1) -> dict[str, int]:
@@ -258,127 +269,10 @@ def _print_dry_run_summary(
         logger.info("Files to transfer: 0 (already synced)")
 
     if total_hidden > 0:
-        logger.info("Files to hide: %d", total_hidden)
+        logger.info("Files to delete: %d", total_hidden)
         for dir_name, count in hidden_by_dir.items():
             logger.info("  %s: %d files", dir_name, count)
-    elif hidden_by_dir is not None:
-        logger.info("Files to hide: 0")
 
     logger.info("=" * 50)
 
 
-def _list_remote_files(
-    profile: Profile,
-    bucket: str,
-    credentials: B2Credentials,
-) -> set[str]:
-    """List all files in the remote destination."""
-    remote_files: set[str] = set()
-    env = _rclone_env(credentials)
-
-    for source in profile.sources:
-        source_path = Path(source)
-        relative_dest = f"{profile.destination}/{source_path.name}"
-        remote = _b2_remote(bucket, relative_dest)
-
-        cmd = [
-            "rclone",
-            "lsf",
-            remote,
-            "--recursive",
-            "--files-only",
-        ]
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
-            for line in result.stdout.strip().splitlines():
-                if line:
-                    # Store as relative path from destination
-                    remote_files.add(f"{source_path.name}/{line}")
-        except subprocess.CalledProcessError as e:
-            logger.warning("Failed to list remote files for %s: %s", relative_dest, e.stderr)
-
-    return remote_files
-
-
-def _list_local_files(profile: Profile) -> set[str]:
-    """List all local files in source directories."""
-    local_files: set[str] = set()
-
-    for source in profile.sources:
-        source_path = Path(source)
-        if not source_path.exists():
-            continue
-
-        for file_path in source_path.rglob("*"):
-            if file_path.is_file():
-                # Check exclude patterns
-                if _should_exclude(file_path, profile.exclude):
-                    continue
-                # Store as relative path
-                relative = f"{source_path.name}/{file_path.relative_to(source_path)}"
-                local_files.add(relative)
-
-    return local_files
-
-
-def _should_exclude(file_path: Path, patterns: list[str]) -> bool:
-    """Check if a file matches any exclude pattern."""
-    from fnmatch import fnmatch
-
-    name = file_path.name
-    for pattern in patterns:
-        if fnmatch(name, pattern):
-            return True
-    return False
-
-
-def _detect_removed_files(
-    profile: Profile,
-    bucket: str,
-    credentials: B2Credentials,
-) -> list[str]:
-    """Detect files that exist in remote but not locally."""
-    remote_files = _list_remote_files(profile, bucket, credentials)
-    local_files = _list_local_files(profile)
-
-    removed = remote_files - local_files
-    return sorted(removed)
-
-
-def _hide_removed_files(
-    profile: Profile,
-    bucket: str,
-    credentials: B2Credentials,
-) -> list[str]:
-    """Hide files in B2 that no longer exist locally.
-
-    Uses rclone deletefile which on B2 creates a deletion marker,
-    effectively hiding the file while preserving version history.
-    """
-    removed = _detect_removed_files(profile, bucket, credentials)
-
-    if not removed:
-        return []
-
-    logger.info("Hiding %d removed files in B2", len(removed))
-    env = _rclone_env(credentials)
-
-    hidden: list[str] = []
-    for relative_path in removed:
-        remote_path = _b2_remote(bucket, f"{profile.destination}/{relative_path}")
-
-        cmd = [
-            "rclone",
-            "deletefile",
-            remote_path,
-        ]
-
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
-            logger.debug("Hidden: %s", relative_path)
-            hidden.append(relative_path)
-        except subprocess.CalledProcessError as e:
-            logger.warning("Failed to hide %s: %s", relative_path, e.stderr)
-
-    return hidden
