@@ -179,6 +179,7 @@ def _build_rclone_copy_cmd(
         dest,
         "--transfers",
         str(transfers),
+        "--checksum",
         "-v",
     ]
 
