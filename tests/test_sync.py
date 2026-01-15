@@ -13,6 +13,7 @@ from android_sync.sync import (
     _build_rclone_cmd,
     _group_by_directory,
     _parse_dry_run_output,
+    _parse_rclone_stats,
     _rclone_env,
     sync_profile,
 )
@@ -223,6 +224,35 @@ class TestParseDryRunOutput:
         transfers, deletes = _parse_dry_run_output("")
         assert transfers == []
         assert deletes == []
+
+
+class TestParseRcloneStats:
+    def test_parses_transfers_and_deletes(self):
+        output = """
+Transferred:        141.303 GiB / 141.303 GiB, 100%, 524.104 KiB/s, ETA 0s
+Checks:                 61 / 61, 100%
+Deleted:                10 / 10, 100%
+Transferred:         52449 / 52449, 100%
+Elapsed time:     78h31m44.6s
+"""
+        stats = _parse_rclone_stats(output)
+        assert stats["transfers"] == 52449
+        assert stats["deletes"] == 10
+
+    def test_transfers_only(self):
+        output = """
+Transferred:        2.339 KiB / 2.339 KiB, 100%, 0 B/s, ETA -
+Transferred:            5 / 5, 100%
+Elapsed time:         0.6s
+"""
+        stats = _parse_rclone_stats(output)
+        assert stats["transfers"] == 5
+        assert stats["deletes"] == 0
+
+    def test_empty_output(self):
+        stats = _parse_rclone_stats("")
+        assert stats["transfers"] == 0
+        assert stats["deletes"] == 0
 
 
 class TestGroupByDirectory:

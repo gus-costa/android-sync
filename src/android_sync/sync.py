@@ -117,13 +117,17 @@ def sync_profile(
                 all_transfers.extend(transfers_list)
                 all_deletes.extend(deletes_list)
             else:
-                # Show progress in real-time
-                subprocess.run(
+                # Capture output to parse final stats
+                result = subprocess.run(
                     cmd,
-                    stderr=None,  # Let stderr go to terminal for progress
+                    capture_output=True,
+                    text=True,
                     check=True,
                     env=env,
                 )
+                stats = _parse_rclone_stats(result.stderr)
+                all_transfers.extend(["_"] * stats.get("transfers", 0))
+                all_deletes.extend(["_"] * stats.get("deletes", 0))
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
@@ -222,6 +226,33 @@ def _parse_dry_run_output(output: str) -> tuple[list[str], list[str]]:
             deletes.append(match.group(1))
 
     return transfers, deletes
+
+
+def _parse_rclone_stats(output: str) -> dict[str, int]:
+    """Parse rclone output to extract transfer statistics.
+
+    rclone outputs summary lines like:
+        Transferred: 141.303G / 141.303 GBytes, 100%, ...  (bytes)
+        Transferred: 52449 / 52449, 100%                   (files)
+        Deleted: 10 / 10, 100%                             (deletes, only with sync)
+
+    Returns:
+        Dict with 'transfers' and 'deletes' counts.
+    """
+    stats = {"transfers": 0, "deletes": 0}
+
+    # Match "Transferred: X / Y" where X and Y are integers (file count line)
+    # The bytes line has units like "G" or "GBytes" so won't match
+    transfer_match = re.search(r"Transferred:\s+(\d+)\s*/\s*\d+,", output)
+    if transfer_match:
+        stats["transfers"] = int(transfer_match.group(1))
+
+    # Match "Deleted: X / Y"
+    delete_match = re.search(r"Deleted:\s+(\d+)\s*/\s*\d+,", output)
+    if delete_match:
+        stats["deletes"] = int(delete_match.group(1))
+
+    return stats
 
 
 def _group_by_directory(files: list[str], depth: int = 1) -> dict[str, int]:
