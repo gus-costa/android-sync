@@ -117,15 +117,28 @@ def sync_profile(
                 all_transfers.extend(transfers_list)
                 all_deletes.extend(deletes_list)
             else:
-                # Capture output to parse final stats
-                result = subprocess.run(
+                # Stream stderr to terminal while capturing for stats
+                import sys
+
+                stderr_lines: list[str] = []
+                process = subprocess.Popen(
                     cmd,
-                    capture_output=True,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    check=True,
                     env=env,
                 )
-                stats = _parse_rclone_stats(result.stderr)
+                for line in process.stderr:
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
+                    stderr_lines.append(line)
+                process.wait()
+
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        process.returncode, cmd, stderr="".join(stderr_lines)
+                    )
+
+                stats = _parse_rclone_stats("".join(stderr_lines))
                 all_transfers.extend(["_"] * stats.get("transfers", 0))
                 all_deletes.extend(["_"] * stats.get("deletes", 0))
 

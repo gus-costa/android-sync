@@ -1,6 +1,5 @@
 """Tests for sync logic."""
 
-import subprocess
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -115,9 +114,14 @@ class TestBuildRcloneCmd:
 
 
 class TestSyncProfile:
-    @patch("android_sync.sync.subprocess.run")
-    def test_sync_success(self, mock_run, profile, credentials):
-        mock_run.return_value = MagicMock(stderr="", returncode=0)
+    @patch("android_sync.sync.subprocess.Popen")
+    def test_sync_success(self, mock_popen, profile, credentials):
+        # Mock Popen for real sync (non-dry-run)
+        mock_process = MagicMock()
+        mock_process.stderr = iter(["Transferred: 5 / 5, 100%\n"])
+        mock_process.wait.return_value = None
+        mock_process.returncode = 0
+        mock_popen.return_value = mock_process
 
         with tempfile.TemporaryDirectory() as tmpdir:
             profile.sources = [tmpdir]
@@ -131,7 +135,7 @@ class TestSyncProfile:
 
             assert result.success
             assert result.profile_name == "test-profile"
-            mock_run.assert_called_once()
+            assert result.files_transferred == 5
 
     @patch("android_sync.sync.subprocess.run")
     def test_sync_missing_source_skipped(self, mock_run, profile, credentials):
@@ -168,11 +172,13 @@ class TestSyncProfile:
             assert result.success
             assert result.files_transferred == 1
 
-    @patch("android_sync.sync.subprocess.run")
-    def test_sync_failure(self, mock_run, profile, credentials):
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, "rclone", stderr="connection failed"
-        )
+    @patch("android_sync.sync.subprocess.Popen")
+    def test_sync_failure(self, mock_popen, profile, credentials):
+        mock_process = MagicMock()
+        mock_process.stderr = iter(["error: connection failed\n"])
+        mock_process.wait.return_value = None
+        mock_process.returncode = 1
+        mock_popen.return_value = mock_process
 
         with tempfile.TemporaryDirectory() as tmpdir:
             profile.sources = [tmpdir]
