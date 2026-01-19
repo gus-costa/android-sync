@@ -20,18 +20,18 @@
 
 ## Phase 2: Configuration Schema Updates
 
-- [ ] **Update Config dataclass in `src/android_sync/config.py`**
+- [x] **Update Config dataclass in `src/android_sync/config.py`**
   - Add `stale_job_timeout_hours: int = 24` to `Config` dataclass
   - Reference: [Spec §3.1](scheduling-spec.md#31-general-section)
   - Source: `src/android_sync/config.py` lines 10-20
 
-- [ ] **Update Schedule dataclass in `src/android_sync/config.py`**
+- [x] **Update Schedule dataclass in `src/android_sync/config.py`**
   - Add `cron: str | None = None` field to `Schedule` dataclass (optional field)
   - If cron is None, schedule is manual-only
   - Reference: [Spec §3.2](scheduling-spec.md#32-schedule-section)
   - Source: `src/android_sync/config.py` lines 22-30
 
-- [ ] **Add cron expression validation in `src/android_sync/config.py`**
+- [x] **Add cron expression validation in `src/android_sync/config.py`**
   - Import `croniter` and `croniter.CroniterBadCronError`
   - In `load_config()` function, after parsing schedules:
     - For each schedule with a cron expression (skip if None), validate using `croniter.is_valid()`
@@ -39,7 +39,7 @@
   - Reference: [Spec §7.1](scheduling-spec.md#71-invalid-cron-expression)
   - Source: `src/android_sync/config.py` lines 70-90 (existing validation section)
 
-- [ ] **Update example config file**
+- [x] **Update example config file**
   - Add `stale_job_timeout_hours = 24` to general section in `config.example.toml`
   - Add `cron = "0 3 * * *"` to some schedule examples
   - Add at least one example without cron (manual schedule)

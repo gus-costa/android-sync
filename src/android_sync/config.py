@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from croniter import croniter
+
 DEFAULT_SECRETS_FILE = Path.home() / ".local" / "share" / "android-sync" / "secrets.gpg"
 
 
@@ -24,6 +26,7 @@ class Schedule:
 
     name: str
     profiles: list[str]
+    cron: str | None = None
 
 
 @dataclass
@@ -37,6 +40,7 @@ class Config:
     profiles: dict[str, Profile]
     schedules: dict[str, Schedule]
     transfers: int = 4
+    stale_job_timeout_hours: int = 24
 
 
 class ConfigError(Exception):
@@ -94,9 +98,18 @@ def _parse_config(data: dict) -> Config:
                     f"Schedule '{name}' references unknown profile: {profile_name}"
                 )
 
+        # Validate cron expression if present
+        cron_expr = schedule_data.get("cron")
+        if cron_expr is not None:
+            if not croniter.is_valid(cron_expr):
+                raise ConfigError(
+                    f"Schedule '{name}' has invalid cron expression: '{cron_expr}'"
+                )
+
         schedules[name] = Schedule(
             name=name,
             profiles=schedule_data["profiles"],
+            cron=cron_expr,
         )
 
     secrets_file_str = general.get("secrets_file")
@@ -113,4 +126,5 @@ def _parse_config(data: dict) -> Config:
         profiles=profiles,
         schedules=schedules,
         transfers=general.get("transfers", 4),
+        stale_job_timeout_hours=general.get("stale_job_timeout_hours", 24),
     )
