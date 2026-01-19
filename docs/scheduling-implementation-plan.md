@@ -4,17 +4,17 @@
 
 ## Phase 1: Dependencies and Project Setup
 
-- [ ] **Add croniter dependency**
+- [x] **Add croniter dependency**
   - Update `pyproject.toml` dependencies array
   - Add: `"croniter>=2.0.0"`
   - Reference: [Spec §6.1](scheduling-spec.md#61-new-dependencies)
 
-- [ ] **Add psutil dependency**
+- [x] **Add psutil dependency**
   - Update `pyproject.toml` dependencies array
   - Add: `"psutil>=5.9.0"`
   - Reference: [Spec §6.1](scheduling-spec.md#61-new-dependencies)
 
-- [ ] **Run dependency installation**
+- [x] **Run dependency installation**
   - Execute: `uv sync`
   - Verify both packages installed correctly
 

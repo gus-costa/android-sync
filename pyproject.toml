@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Backup files from Android (Termux) to Backblaze B2 using rclone"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "croniter>=2.0.0",
+    "psutil>=5.9.0",
+]
 
 [project.scripts]
 android-sync = "android_sync.cli:main"
