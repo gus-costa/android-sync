@@ -49,21 +49,21 @@
 
 ## Phase 3: Scheduler Module Implementation
 
-- [ ] **Create new module: `src/android_sync/scheduler.py`**
+- [x] **Create new module: `src/android_sync/scheduler.py`**
   - Reference: [Spec §5.3](scheduling-spec.md#53-scheduler-module-functions)
 
-- [ ] **Implement ScheduleState dataclass**
+- [x] **Implement ScheduleState dataclass**
   - Fields: schedule, last_run, next_run, status, started_at, finished_at, pid
   - Use `datetime | None` for nullable datetime fields (last_run, next_run, started_at, finished_at)
   - `next_run` is None for manual schedules (no cron expression)
   - Use `Literal["pending", "running", "success", "failed"]` for status
   - Reference: [Spec §4.2](scheduling-spec.md#42-state-file-schema)
 
-- [ ] **Implement get_state_directory() helper**
+- [x] **Implement get_state_directory() helper**
   - Returns `Path.home() / ".local" / "share" / "android-sync" / "state"`
   - Reference: [Spec §4.1](scheduling-spec.md#41-state-directory)
 
-- [ ] **Implement load_state() function**
+- [x] **Implement load_state() function**
   - Signature: `load_state(schedule_name: str, cron_expr: str | None) -> ScheduleState`
   - If file doesn't exist, create initial state
   - If cron_expr is not None: calculate next_run; else: next_run = None
@@ -72,19 +72,19 @@
   - Reference: [Spec §4.3 Initial State](scheduling-spec.md#43-state-lifecycle)
   - Error handling: [Spec §7.2](scheduling-spec.md#72-state-file-corruption)
 
-- [ ] **Implement save_state() function**
+- [x] **Implement save_state() function**
   - Signature: `save_state(state: ScheduleState) -> None`
   - Convert datetime objects to ISO strings
   - Write to JSON with pretty formatting
   - Ensure directory exists
   - Reference: [Spec §4.2](scheduling-spec.md#42-state-file-schema)
 
-- [ ] **Implement calculate_next_run() function**
+- [x] **Implement calculate_next_run() function**
   - Signature: `calculate_next_run(cron_expr: str, from_time: datetime) -> datetime`
   - Use croniter to get next execution time
   - Reference: [Spec §5.3.3](scheduling-spec.md#533-next-run-calculation)
 
-- [ ] **Implement check_stale_job() function**
+- [x] **Implement check_stale_job() function**
   - Signature: `check_stale_job(state: ScheduleState, timeout_hours: int) -> bool`
   - Check if status is "running"
   - Use `psutil.pid_exists()` to verify PID
@@ -93,7 +93,7 @@
   - Return True if stale, False otherwise
   - Reference: [Spec §5.3.1](scheduling-spec.md#531-stale-job-detection)
 
-- [ ] **Implement get_overdue_schedules() function**
+- [x] **Implement get_overdue_schedules() function**
   - Signature: `get_overdue_schedules(config: Config) -> list[tuple[str, float]]`
   - Load all states for schedules in config
   - Skip schedules without cron expressions (manual-only)
@@ -105,14 +105,14 @@
   - Priority model: [Spec §2.2](scheduling-spec.md#22-priority-model)
   - Retry strategy: [Spec §2.3](scheduling-spec.md#23-failure-handling-and-retry-strategy)
 
-- [ ] **Implement spawn_background_job() function**
+- [x] **Implement spawn_background_job() function**
   - Signature: `spawn_background_job(schedule_name: str, config_path: Path) -> None`
   - Use `subprocess.Popen` with `start_new_session=True`
   - Redirect stdout/stderr to log file
   - Pass config path as argument
   - Reference: [Spec §5.3.2](scheduling-spec.md#532-background-job-spawning)
 
-- [ ] **Implement update_state_on_start() function**
+- [x] **Implement update_state_on_start() function**
   - Signature: `update_state_on_start(schedule_name: str, config: Config) -> None`
   - Load current state
   - Set status = "running"
@@ -122,7 +122,7 @@
   - Save state
   - Reference: [Spec §4.3 On Job Start](scheduling-spec.md#43-state-lifecycle)
 
-- [ ] **Implement update_state_on_finish() function**
+- [x] **Implement update_state_on_finish() function**
   - Signature: `update_state_on_finish(schedule_name: str, config: Config, success: bool) -> None`
   - Load current state and schedule config (to get cron expression)
   - Set finished_at = now
