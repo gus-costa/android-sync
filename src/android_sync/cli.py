@@ -175,35 +175,34 @@ def cmd_setup(args: argparse.Namespace) -> int:
     # Check if secrets file exists
     secrets_file = args.secrets_file
     if secrets_file.exists() and not args.force:
-        print(f"Error: Secrets file already exists: {secrets_file}", file=sys.stderr)
-        print("Use --force to overwrite.", file=sys.stderr)
-        return 1
+        print(f"Secrets file already exists: {secrets_file}")
+        print("Skipping credential setup.")
+    else:
+        # Prompt for credentials
+        print()
+        print("Enter your Backblaze B2 credentials:")
+        key_id = input("  Key ID: ").strip()
+        app_key = getpass.getpass("  Application Key: ").strip()
 
-    # Prompt for credentials
-    print()
-    print("Enter your Backblaze B2 credentials:")
-    key_id = input("  Key ID: ").strip()
-    app_key = getpass.getpass("  Application Key: ").strip()
+        if not key_id or not app_key:
+            print("Error: Both Key ID and Application Key are required.", file=sys.stderr)
+            return 1
 
-    if not key_id or not app_key:
-        print("Error: Both Key ID and Application Key are required.", file=sys.stderr)
-        return 1
+        # Create secrets directory
+        secrets_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create secrets directory
-    secrets_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Encrypt secrets
-    print(f"Encrypting secrets to {secrets_file}...")
-    try:
-        secrets = {
-            "b2_key_id": key_id,
-            "b2_app_key": app_key,
-        }
-        encrypt_secrets(secrets, secrets_file, DEFAULT_KEY_ALIAS)
-        print("  Secrets encrypted successfully.")
-    except KeystoreError as e:
-        print(f"Error encrypting secrets: {e}", file=sys.stderr)
-        return 1
+        # Encrypt secrets
+        print(f"Encrypting secrets to {secrets_file}...")
+        try:
+            secrets = {
+                "b2_key_id": key_id,
+                "b2_app_key": app_key,
+            }
+            encrypt_secrets(secrets, secrets_file, DEFAULT_KEY_ALIAS)
+            print("  Secrets encrypted successfully.")
+        except KeystoreError as e:
+            print(f"Error encrypting secrets: {e}", file=sys.stderr)
+            return 1
 
     # Setup scheduler
     print()
