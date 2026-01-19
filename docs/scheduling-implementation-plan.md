@@ -261,7 +261,7 @@
 
 ## Phase 7: Documentation
 
-- [ ] **Update README.md**
+- [x] **Update README.md**
   - Add scheduling section
   - Explain cron syntax and examples
   - Explain difference between scheduled (with cron) and manual (without cron) schedules
@@ -272,12 +272,12 @@
   - Reference: [Spec §2.3](scheduling-spec.md#23-failure-handling-and-retry-strategy) for retry behavior
   - Source: `README.md`
 
-- [ ] **Update config.example.toml**
+- [x] **Update config.example.toml**
   - Already covered in Phase 2, but verify completeness
   - Add detailed comments explaining scheduling
   - Source: `config.example.toml`
 
-- [ ] **Create troubleshooting guide**
+- [x] **Create troubleshooting guide**
   - Common issues: missing termux-api, failed registration
   - How to check job scheduler status
   - How to reset failed jobs
