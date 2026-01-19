@@ -140,7 +140,7 @@
 
 ## Phase 4: CLI Command Implementations
 
-- [ ] **Add 'check' subcommand to `src/android_sync/cli.py`**
+- [x] **Add 'check' subcommand to `src/android_sync/cli.py`**
   - Add parser: `subparsers.add_parser('check', ...)`
   - Implement handler function
   - Load config
@@ -150,7 +150,7 @@
   - Reference: [Spec §5.2.1](scheduling-spec.md#521-new-android-sync-check)
   - Source: `src/android_sync/cli.py` line ~90 (where subparsers are defined)
 
-- [ ] **Add 'status' subcommand to `src/android_sync/cli.py`**
+- [x] **Add 'status' subcommand to `src/android_sync/cli.py`**
   - Add parser: `subparsers.add_parser('status', ...)`
   - Implement handler function
   - Load config
@@ -162,7 +162,7 @@
   - Reference: [Spec §5.2.2](scheduling-spec.md#522-new-android-sync-status)
   - Source: `src/android_sync/cli.py`
 
-- [ ] **Add 'reset' subcommand to `src/android_sync/cli.py`**
+- [x] **Add 'reset' subcommand to `src/android_sync/cli.py`**
   - Add parser: `subparsers.add_parser('reset', ...)`
   - Add positional argument: schedule name
   - Implement handler function
@@ -182,7 +182,7 @@
   - Reference: [Spec §5.2.4](scheduling-spec.md#524-modified-android-sync-run-schedule)
   - Source: `src/android_sync/cli.py` lines ~150-200 (run command implementation)
 
-- [ ] **Modify 'setup' command in `src/android_sync/cli.py`**
+- [x] **Modify 'setup' command in `src/android_sync/cli.py`**
   - Add state directory creation
   - Create check script file
   - Make script executable (use `os.chmod`)
@@ -194,13 +194,13 @@
 
 ## Phase 5: Check Script Creation
 
-- [ ] **Create check script template in code**
+- [x] **Create check script template in code**
   - Script content defined in `src/android_sync/cli.py` setup function
   - Shebang: `#!/data/data/com.termux/files/usr/bin/bash`
   - Body: `exec android-sync check`
   - Reference: [Spec §5.1](scheduling-spec.md#51-check-script)
 
-- [ ] **Implement script installation in setup command**
+- [x] **Implement script installation in setup command**
   - Write to `~/.local/share/android-sync/check-schedule.sh`
   - Make executable: `os.chmod(path, 0o755)`
   - Already covered in Phase 4, but verify script content matches spec
