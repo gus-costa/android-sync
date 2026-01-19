@@ -143,5 +143,148 @@ bucket = "test"
             assert cfg.transfers == 4
             # Default secrets file
             assert cfg.secrets_file.name == "secrets.gpg"
+            # Default stale job timeout
+            assert cfg.stale_job_timeout_hours == 24
+        finally:
+            path.unlink()
+
+
+class TestSchedulingConfiguration:
+    """Test scheduling-related configuration validation."""
+
+    def test_valid_cron_expression(self):
+        """Test that valid cron expressions are accepted."""
+        config = """\
+[general]
+bucket = "test"
+
+[profiles.photos]
+sources = ["/storage"]
+destination = "photos"
+
+[schedules.daily]
+profiles = ["photos"]
+cron = "0 3 * * *"
+"""
+        path = write_config(config)
+        try:
+            cfg = load_config(path)
+            assert cfg.schedules["daily"].cron == "0 3 * * *"
+        finally:
+            path.unlink()
+
+    def test_invalid_cron_expression(self):
+        """Test that invalid cron expressions raise an error."""
+        config = """\
+[general]
+bucket = "test"
+
+[profiles.photos]
+sources = ["/storage"]
+destination = "photos"
+
+[schedules.bad]
+profiles = ["photos"]
+cron = "invalid cron"
+"""
+        path = write_config(config)
+        try:
+            with pytest.raises(ConfigError, match="invalid cron expression"):
+                load_config(path)
+        finally:
+            path.unlink()
+
+    def test_missing_cron_is_valid(self):
+        """Test that schedules without cron (manual-only) are valid."""
+        config = """\
+[general]
+bucket = "test"
+
+[profiles.photos]
+sources = ["/storage"]
+destination = "photos"
+
+[schedules.manual]
+profiles = ["photos"]
+"""
+        path = write_config(config)
+        try:
+            cfg = load_config(path)
+            assert cfg.schedules["manual"].cron is None
+        finally:
+            path.unlink()
+
+    def test_mixed_scheduled_and_manual(self):
+        """Test mix of scheduled and manual schedules."""
+        config = """\
+[general]
+bucket = "test"
+
+[profiles.photos]
+sources = ["/storage"]
+destination = "photos"
+
+[schedules.scheduled]
+profiles = ["photos"]
+cron = "0 3 * * *"
+
+[schedules.manual]
+profiles = ["photos"]
+"""
+        path = write_config(config)
+        try:
+            cfg = load_config(path)
+            assert cfg.schedules["scheduled"].cron == "0 3 * * *"
+            assert cfg.schedules["manual"].cron is None
+        finally:
+            path.unlink()
+
+    def test_stale_job_timeout_custom_value(self):
+        """Test custom stale job timeout value."""
+        config = """\
+[general]
+bucket = "test"
+stale_job_timeout_hours = 48
+"""
+        path = write_config(config)
+        try:
+            cfg = load_config(path)
+            assert cfg.stale_job_timeout_hours == 48
+        finally:
+            path.unlink()
+
+    def test_various_cron_expressions(self):
+        """Test various valid cron expression formats."""
+        config = """\
+[general]
+bucket = "test"
+
+[profiles.photos]
+sources = ["/storage"]
+destination = "photos"
+
+[schedules.hourly]
+profiles = ["photos"]
+cron = "0 * * * *"
+
+[schedules.every_six_hours]
+profiles = ["photos"]
+cron = "0 */6 * * *"
+
+[schedules.weekly]
+profiles = ["photos"]
+cron = "0 2 * * 0"
+
+[schedules.monthly]
+profiles = ["photos"]
+cron = "0 0 1 * *"
+"""
+        path = write_config(config)
+        try:
+            cfg = load_config(path)
+            assert cfg.schedules["hourly"].cron == "0 * * * *"
+            assert cfg.schedules["every_six_hours"].cron == "0 */6 * * *"
+            assert cfg.schedules["weekly"].cron == "0 2 * * 0"
+            assert cfg.schedules["monthly"].cron == "0 0 1 * *"
         finally:
             path.unlink()

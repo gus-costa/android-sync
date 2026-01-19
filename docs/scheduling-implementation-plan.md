@@ -207,26 +207,26 @@
 
 ## Phase 6: Testing
 
-- [ ] **Create test file: `tests/test_scheduler.py`**
+- [x] **Create test file: `tests/test_scheduler.py`**
   - Reference: [Spec §8.1](scheduling-spec.md#81-unit-tests)
 
-- [ ] **Test ScheduleState serialization**
+- [x] **Test ScheduleState serialization**
   - Test JSON round-trip (save → load)
   - Test datetime conversion
   - Test null handling
 
-- [ ] **Test calculate_next_run()**
+- [x] **Test calculate_next_run()**
   - Test various cron expressions
   - Verify next run is in the future
   - Test edge cases (end of month, etc.)
 
-- [ ] **Test check_stale_job()**
+- [x] **Test check_stale_job()**
   - Mock `psutil.pid_exists()`
   - Test timeout detection
   - Test PID cleanup
   - Verify SIGTERM sent to stale jobs
 
-- [ ] **Test get_overdue_schedules()**
+- [x] **Test get_overdue_schedules()**
   - Mock state files
   - Test priority sorting (most overdue first)
   - Test failed job reset logic (reset to pending when next_run time arrives)
@@ -234,27 +234,27 @@
   - Test skipping manual schedules (no cron)
   - Reference: [Spec §2.3](scheduling-spec.md#23-failure-handling-and-retry-strategy)
 
-- [ ] **Test configuration validation**
+- [x] **Test configuration validation**
   - Test invalid cron expressions (should raise error)
   - Test missing cron field (should be valid - manual schedule)
   - Test mix of scheduled and manual schedules
   - Verify error messages
   - Source: `tests/test_config.py` (extend existing tests)
 
-- [ ] **Test manual schedule behavior**
+- [x] **Test manual schedule behavior**
   - Create schedule without cron expression
   - Verify it's not picked up by check command
   - Verify it can be run manually
   - Verify state updates correctly (next_run stays None)
 
-- [ ] **Create integration test: full check cycle**
+- [x] **Create integration test: full check cycle**
   - Mock config with multiple schedules
   - Create state files
   - Run check command
   - Verify correct schedule selected
   - Verify background job spawned
 
-- [ ] **Update existing tests if needed**
+- [x] **Update existing tests if needed**
   - Run full test suite: `pytest tests/`
   - Fix any broken tests due to config schema changes
   - Source: `tests/test_config.py`, `tests/test_sync.py`
