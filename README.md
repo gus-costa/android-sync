@@ -45,7 +45,7 @@ pip install .
 
 ### 1. Initialize credentials
 
-The setup command generates a signing key in Android Keystore and encrypts your B2 credentials:
+The setup command generates a signing key in Android Keystore, encrypts your B2 credentials, and configures automatic scheduling:
 
 ```bash
 android-sync setup
@@ -55,6 +55,12 @@ android-sync setup
 This creates:
 - A non-exportable RSA key in Android Keystore (`android-sync`)
 - An encrypted secrets file at `~/.local/share/android-sync/secrets.gpg`
+- State directory and scheduler configuration
+
+**Note:** The setup command is idempotent and safe to run multiple times. If credentials already exist, it will skip the credential setup and only configure scheduling. To change credentials, use the `--force` flag.
+```bash
+android-sync setup --force
+```
 
 ### 2. Create configuration
 

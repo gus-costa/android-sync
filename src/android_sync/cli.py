@@ -227,9 +227,10 @@ exec android-sync check
         subprocess.run(
             [
                 "termux-job-scheduler",
-                "schedule",
                 "--script",
                 str(check_script_path),
+                "--job-id",
+                "1",
                 "--period-ms",
                 "900000",  # 15 minutes
                 "--persisted",
