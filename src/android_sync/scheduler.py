@@ -61,7 +61,7 @@ def load_state(schedule_name: str, cron_expr: str | None) -> ScheduleState:
         if cron_expr is not None:
             next_run = calculate_next_run(cron_expr, datetime.now())
 
-        return ScheduleState(
+        state = ScheduleState(
             schedule=schedule_name,
             last_run=None,
             next_run=next_run,
@@ -70,6 +70,8 @@ def load_state(schedule_name: str, cron_expr: str | None) -> ScheduleState:
             finished_at=None,
             pid=None,
         )
+        save_state(state)
+        return state
 
     # Load existing state
     try:
@@ -101,7 +103,7 @@ def load_state(schedule_name: str, cron_expr: str | None) -> ScheduleState:
         if cron_expr is not None:
             next_run = calculate_next_run(cron_expr, datetime.now())
 
-        return ScheduleState(
+        state = ScheduleState(
             schedule=schedule_name,
             last_run=None,
             next_run=next_run,
@@ -110,6 +112,8 @@ def load_state(schedule_name: str, cron_expr: str | None) -> ScheduleState:
             finished_at=None,
             pid=None,
         )
+        save_state(state)
+        return state
 
 
 def save_state(state: ScheduleState) -> None:
