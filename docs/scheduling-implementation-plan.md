@@ -173,7 +173,7 @@
   - Reference: [Spec §5.2.3](scheduling-spec.md#523-new-android-sync-reset-schedule)
   - Source: `src/android_sync/cli.py`
 
-- [ ] **Modify 'run' command in `src/android_sync/cli.py`**
+- [x] **Modify 'run' command in `src/android_sync/cli.py`**
   - Add call to `update_state_on_start()` before sync execution
   - Wrap execution in try/except
   - Add call to `update_state_on_finish()` after sync

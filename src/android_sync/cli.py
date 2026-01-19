@@ -16,6 +16,7 @@ from .keystore import (
     key_exists,
 )
 from .logging import setup_logging
+from .scheduler import update_state_on_finish, update_state_on_start
 from .sync import SyncResult, sync_profile
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "android-sync" / "config.toml"
@@ -203,6 +204,7 @@ def cmd_run(config: Config, args: argparse.Namespace, logger) -> int:
 
     # Determine which profiles to run
     profiles_to_run: list[str] = []
+    schedule_name = None
 
     if args.all:
         profiles_to_run = list(config.profiles.keys())
@@ -215,39 +217,51 @@ def cmd_run(config: Config, args: argparse.Namespace, logger) -> int:
         if args.schedule not in config.schedules:
             logger.error("Unknown schedule: %s", args.schedule)
             return 1
+        schedule_name = args.schedule
         profiles_to_run = config.schedules[args.schedule].profiles
 
     if not profiles_to_run:
         logger.error("No profiles to run")
         return 1
 
+    # Update state when running a schedule
+    if schedule_name:
+        update_state_on_start(schedule_name, config)
+
     # Run sync for each profile
-    results: list[SyncResult] = []
-    for profile_name in profiles_to_run:
-        profile = config.profiles[profile_name]
-        result = sync_profile(
-            profile=profile,
-            bucket=config.bucket,
-            credentials=credentials,
-            transfers=config.transfers,
-            dry_run=args.dry_run,
+    success = False
+    try:
+        results: list[SyncResult] = []
+        for profile_name in profiles_to_run:
+            profile = config.profiles[profile_name]
+            result = sync_profile(
+                profile=profile,
+                bucket=config.bucket,
+                credentials=credentials,
+                transfers=config.transfers,
+                dry_run=args.dry_run,
+            )
+            results.append(result)
+
+        # Summary
+        success_count = sum(1 for r in results if r.success)
+        total_files = sum(r.files_transferred for r in results)
+        total_hidden = sum(len(r.hidden_files) for r in results)
+
+        logger.info(
+            "Sync complete: %d/%d profiles succeeded, %d files transferred, %d files hidden",
+            success_count,
+            len(results),
+            total_files,
+            total_hidden,
         )
-        results.append(result)
 
-    # Summary
-    success_count = sum(1 for r in results if r.success)
-    total_files = sum(r.files_transferred for r in results)
-    total_hidden = sum(len(r.hidden_files) for r in results)
-
-    logger.info(
-        "Sync complete: %d/%d profiles succeeded, %d files transferred, %d files hidden",
-        success_count,
-        len(results),
-        total_files,
-        total_hidden,
-    )
-
-    return 0 if all(r.success for r in results) else 1
+        success = all(r.success for r in results)
+        return 0 if success else 1
+    finally:
+        # Update state when running a schedule
+        if schedule_name:
+            update_state_on_finish(schedule_name, config, success)
 
 
 if __name__ == "__main__":
