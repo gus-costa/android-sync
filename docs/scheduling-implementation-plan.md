@@ -341,11 +341,11 @@
   - Increment to 0.2.0 in `src/android_sync/__init__.py`
   - Update `pyproject.toml` version
 
-- [ ] **Run full test suite**
+- [x] **Run full test suite**
   - `pytest tests/ -v`
   - Ensure all tests pass
 
-- [ ] **Run linter**
+- [x] **Run linter**
   - `ruff check src/ tests/`
   - Fix any linting issues
 
