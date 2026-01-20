@@ -285,13 +285,13 @@
 
 ## Phase 8: Manual Testing and Validation
 
-- [ ] **Test on actual Android device**
+- [x] **Test on actual Android device**
   - Run setup command
   - Verify check script created
   - Verify job scheduler registered
   - Reference: [Spec §8.3](scheduling-spec.md#83-manual-testing)
 
-- [ ] **Test check command manually**
+- [x] **Test check command manually**
   - Create test states (pending, overdue, running)
   - Run `android-sync check`
   - Verify correct behavior
@@ -307,12 +307,12 @@
   - Wait for timeout
   - Verify it's killed and marked failed
 
-- [ ] **Test status command**
+- [x] **Test status command**
   - Run with various state configurations
   - Verify output formatting
   - Check color coding
 
-- [ ] **Test reset command**
+- [x] **Test reset command**
   - Reset a failed schedule
   - Verify state cleared correctly
 
