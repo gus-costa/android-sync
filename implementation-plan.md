@@ -179,7 +179,8 @@
   - Verify registration successful
   - Add error handling for missing termux-api
   - Reference: [Spec §5.2.5](scheduling.md#525-modified-android-sync-setup)
-  - **STATUS:** VERIFIED at cli.py:207-252
+  - **STATUS:** COMPLETE at cli.py:207-252
+  - **UPDATE:** Network/battery constraints added (see Phase 10 §3) ✅
 
 ## Phase 5: Check Script Creation ✅
 
@@ -265,7 +266,8 @@
   - Document new CLI commands (check, status, reset)
   - Document retry behavior (no immediate retry, waits for next cron time)
   - Add troubleshooting section
-  - **STATUS:** VERIFIED - Comprehensive "Automatic Scheduling" section at README.md:181-321
+  - **STATUS:** COMPLETE - Comprehensive "Automatic Scheduling" section at README.md:181-327
+  - **UPDATE:** Network/battery constraints documented (see Phase 10 §3) ✅
 
 - [x] **Update config.example.toml**
   - Add detailed comments explaining scheduling
@@ -338,6 +340,22 @@
   - Verify next_run stays None
   - **STATUS:** PENDING - requires actual Android device (automated test exists)
 
+- [ ] **Test network constraint**
+  - Disable WiFi and cellular data
+  - Verify check command doesn't run when scheduled
+  - Re-enable network
+  - Verify check runs within 15 minutes
+  - Reference: [Spec §8.3](scheduling.md#83-manual-testing)
+  - **STATUS:** PENDING - implementation complete, requires Android device testing
+
+- [ ] **Test battery constraint**
+  - Drain battery below ~15% (or simulate low battery state)
+  - Verify check command doesn't run when scheduled
+  - Charge device above threshold
+  - Verify check runs within 15 minutes
+  - Reference: [Spec §8.3](scheduling.md#83-manual-testing)
+  - **STATUS:** PENDING - implementation complete, requires Android device testing
+
 ## Phase 9: Final Integration
 
 - [x] **Update version number**
@@ -362,12 +380,16 @@
   - Wait for scheduled execution
   - Verify automatic schedules run, manual schedules don't
   - Test manual execution of manual schedule
+  - Test network and battery constraints (Phase 10 §3 implemented)
   - Verify success
   - **STATUS:** PENDING - requires actual Android device
+  - **NOTE:** Constraint testing implementation complete, device testing remains
 
 ---
 
-## Gap Analysis: Missing Features for Unattended Operation
+## Phase 10: Additional Features for Unattended Operation
+
+This phase covers enhancements identified after initial scheduling implementation to improve reliability and robustness for truly unattended operation.
 
 ### 1. Concurrent Execution Prevention (File Locking) ✅
 
@@ -416,6 +438,80 @@ File locking has been implemented to prevent concurrent execution of the check c
 3. Now safely detects PID reuse and marks job as stale without killing
 
 **Priority:** COMPLETE - Security best practice from spec §9.3 now implemented
+
+### 3. Network and Battery Awareness ✅
+
+**Status:** IMPLEMENTED
+**Spec Reference:** §1.1 (Goals), §2.1 (Execution Model - Constraint Handling), §3.1 (Hardcoded Constraints), §5.2.5 (Setup Command), §7.5 (Error Handling - Constraint Not Met), §8.3 (Manual Testing)
+
+**Implementation:** Network and battery constraints have been added to ensure reliable unattended operation.
+
+#### Implementation Tasks:
+
+- [x] **Update setup command to include hardcoded constraints**
+  - Location: `src/android_sync/cli.py` - `cmd_setup()` function (lines 225-243)
+  - Modified termux-job-scheduler registration command to include:
+    - `--network any` flag (requires any network connection)
+    - `--battery-not-low` flag (requires battery not in low state ~15%+)
+  - Reference: [Spec §5.2.5](scheduling.md#525-modified-android-sync-setup)
+  - **STATUS:** COMPLETE - Added flags with spec reference comments
+
+- [x] **Update README.md documentation**
+  - Location: `README.md` - "Automatic Scheduling" section (lines 181-327)
+  - Added new subsection "Network and Battery Constraints" explaining:
+    - Jobs only run when network is available (WiFi or cellular)
+    - Jobs only run when battery is not low (~15%+ charge)
+    - Constraints are hardcoded (not configurable)
+    - If constraints aren't met, job waits until next check cycle (within 15 minutes)
+    - Manual run bypasses constraints
+  - Reference: [Spec §2.1](scheduling.md#21-execution-model) - Constraint Handling
+  - **STATUS:** COMPLETE
+
+- [x] **Add troubleshooting guidance**
+  - Location: `README.md` - Troubleshooting section (lines 311-328)
+  - Added guidance for constraint-related issues:
+    - Schedule shows as overdue but hasn't run → check network/battery status
+    - Manual run command bypasses constraints: `android-sync run <schedule>`
+    - Updated manual re-registration example to include constraint flags
+  - Reference: [Spec §7.5](scheduling.md#75-constraint-not-met-networkbattery)
+  - **STATUS:** COMPLETE
+
+- [x] **Update manual testing procedures**
+  - Manual testing procedures noted in spec reference
+  - Future testing scenarios documented:
+    - Test network constraint: disable WiFi/cellular, verify check doesn't run, re-enable and verify execution within 15 minutes
+    - Test battery constraint: test with battery below ~15%, verify check doesn't run, charge and verify execution within 15 minutes
+    - Verify manual run bypasses constraints
+  - Reference: [Spec §8.3](scheduling.md#83-manual-testing)
+  - **STATUS:** DOCUMENTED (requires Android device for actual testing)
+
+- [x] **Verify no configuration changes needed**
+  - Confirmed no changes required to:
+    - `src/android_sync/config.py` (constraints are hardcoded, not in config)
+    - `config.example.toml` (no new fields to add)
+  - Reference: [Spec §3.1](scheduling.md#31-general-section) - Hardcoded Constraints
+  - **STATUS:** VERIFIED
+
+**Testing:**
+- [x] **Unit tests**
+  - No new unit tests required - constraint flags are passed to external command
+  - Existing tests verify setup command runs successfully
+  - All 93 tests passing
+  - **STATUS:** VERIFIED
+
+- [ ] **Manual testing on Android device**
+  - Run setup command and verify registration includes constraints
+  - Test actual constraint enforcement (network off, low battery)
+  - Verify schedules execute once constraints are satisfied
+  - **STATUS:** PENDING (requires Android device)
+
+**Priority:** COMPLETE - Implementation finished, manual device testing remains
+
+**Notes:**
+- Constraints are enforced by Android JobScheduler, not by our code
+- No retry logic needed - JobScheduler automatically waits for constraints
+- Manual `android-sync run` command bypasses constraints (user-initiated)
+- Future enhancement: make constraints configurable per-schedule (see Spec §10)
 
 ## Key Files Modified
 

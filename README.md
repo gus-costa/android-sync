@@ -266,6 +266,21 @@ android-sync check
 
 **Concurrent Execution Prevention**: File locking ensures that only one check process runs at a time. If a check is already running when triggered, the new instance exits silently and waits for the next 15-minute interval.
 
+### Network and Battery Constraints
+
+Scheduled checks are subject to the following constraints enforced by Android JobScheduler:
+
+- **Network Required**: Jobs only run when network connectivity is available (WiFi or cellular data)
+- **Battery Not Low**: Jobs only run when battery is not in low state (typically above ~15% charge)
+
+These constraints are hardcoded to ensure reliable, unattended operation without wasting data or draining battery at critical levels.
+
+**Behavior when constraints aren't met:**
+- If a schedule is due but network is unavailable or battery is low, the check doesn't run
+- The schedule remains overdue and will be picked up on the next check cycle (within 15 minutes of constraints being satisfied)
+- No explicit error is logged (this is expected behavior)
+- You can always bypass constraints by running manually: `android-sync run <schedule_name>`
+
 ### Failure Handling and Retries
 
 When a scheduled job fails:
@@ -312,8 +327,10 @@ termux-job-scheduler list
 
 - **Missing termux-api**: Install with `pkg install termux-api`
 - **Job not running**: Check device battery optimization settings for Termux
+- **Schedule overdue but hasn't run**: Check network connectivity and battery level - scheduled checks require network and battery to be above low state
 - **Failed schedules**: Use `android-sync status` to see failure details, then `android-sync reset <schedule>` to retry
 - **Stale jobs**: Check logs in the configured log directory
+- **Need to bypass constraints**: Run manually with `android-sync run <schedule_name>` - this bypasses network and battery constraints
 
 **Manual re-registration (if needed):**
 
@@ -322,7 +339,9 @@ termux-job-scheduler schedule \
   --script ~/.local/share/android-sync/check-schedule.sh \
   --job-id 1 \
   --period-ms 900000 \
-  --persisted true
+  --persisted true \
+  --network any \
+  --battery-not-low
 ```
 
 ## Removed File Handling

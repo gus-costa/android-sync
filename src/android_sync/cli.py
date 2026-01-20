@@ -223,6 +223,7 @@ exec android-sync check
     print(f"  Created check script: {check_script_path}")
 
     # Register with termux-job-scheduler
+    # Reference: Spec §5.2.5 - Network and battery constraints ensure reliable unattended operation
     print("  Registering with termux-job-scheduler...")
     try:
         subprocess.run(
@@ -236,6 +237,9 @@ exec android-sync check
                 "900000",  # 15 minutes
                 "--persisted",
                 "true",
+                "--network",
+                "any",  # Spec §3.1: Require any network connection (WiFi or cellular)
+                "--battery-not-low",  # Spec §3.1: Require battery not in low state (~15%+)
             ],
             capture_output=True,
             text=True,

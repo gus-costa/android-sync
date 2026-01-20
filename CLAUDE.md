@@ -2,5 +2,12 @@ Check README.md for more context on the project
 
 - Always use uv during development
 
-Tests: `uv run pytest`
-Lint: `uv run ruff check`
+## Verification Commands
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run linter
+uv run ruff check src/ tests/
+```
