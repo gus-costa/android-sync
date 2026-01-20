@@ -264,6 +264,8 @@ android-sync check
 4. Jobs run in the background, independent of the check process
 5. State is tracked in `~/.local/share/android-sync/state/`
 
+**Concurrent Execution Prevention**: File locking ensures that only one check process runs at a time. If a check is already running when triggered, the new instance exits silently and waits for the next 15-minute interval.
+
 ### Failure Handling and Retries
 
 When a scheduled job fails:

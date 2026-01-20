@@ -1,5 +1,6 @@
 """Tests for the scheduler module."""
 
+import fcntl
 import os
 import signal
 from datetime import datetime, timedelta
@@ -884,3 +885,59 @@ class TestIntegrationCheckCycle:
         # Should be in overdue list (reset to pending and overdue)
         assert len(overdue) == 1
         assert overdue[0][0] == "stale"
+
+    def test_concurrent_execution_prevention(self, tmp_path):
+        """Test that concurrent check commands are prevented by file locking."""
+        import argparse
+
+        from android_sync.cli import cmd_check
+
+        config = create_test_config(
+            schedules={
+                "daily": Schedule(name="daily", profiles=["photos"], cron="0 3 * * *")
+            }
+        )
+
+        now = datetime.now()
+        state = ScheduleState(
+            schedule="daily",
+            last_run=None,
+            next_run=now - timedelta(hours=1),  # Overdue
+            status="pending",
+            started_at=None,
+            finished_at=None,
+            pid=None,
+        )
+
+        # Patch get_state_directory for both scheduler and cli modules
+        with patch("android_sync.scheduler.get_state_directory", return_value=tmp_path), \
+             patch("android_sync.cli.get_state_directory", return_value=tmp_path):
+            save_state(state)
+
+            # Create args namespace with config path
+            args = argparse.Namespace(config=Path("/tmp/config.toml"))
+
+            # Acquire lock manually to simulate concurrent execution
+            lock_file_path = tmp_path / "check.lock"
+            lock_file = open(lock_file_path, "w")
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+            try:
+                # Try to run check command while lock is held
+                with patch("android_sync.cli.spawn_background_job") as mock_spawn:
+                    result = cmd_check(config, args)
+
+                    # Should exit without spawning job (lock is held)
+                    assert result == 0
+                    mock_spawn.assert_not_called()
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+
+            # Now run again without lock - should spawn job
+            with patch("android_sync.cli.spawn_background_job") as mock_spawn:
+                result = cmd_check(config, args)
+
+                # Should successfully spawn job
+                assert result == 0
+                mock_spawn.assert_called_once()

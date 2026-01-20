@@ -1,6 +1,7 @@
 """Command-line interface for android-sync."""
 
 import argparse
+import fcntl
 import getpass
 import os
 import subprocess
@@ -346,18 +347,36 @@ def cmd_run(config: Config, args: argparse.Namespace, logger) -> int:
 
 def cmd_check(config: Config, args: argparse.Namespace) -> int:
     """Handle check command - check for overdue schedules and spawn one job if needed."""
-    # Get overdue schedules
-    overdue_schedules = get_overdue_schedules(config)
+    # Acquire lock to prevent concurrent check executions
+    lock_file_path = get_state_directory() / "check.lock"
+    lock_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not overdue_schedules:
-        # No overdue schedules, exit silently
+    lock_file = open(lock_file_path, "w")
+    try:
+        # Try to acquire exclusive lock (non-blocking)
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Lock is held by another process, exit silently
+        lock_file.close()
         return 0
 
-    # Spawn the most overdue schedule
-    schedule_name, overdue_minutes = overdue_schedules[0]
-    spawn_background_job(schedule_name, args.config)
+    try:
+        # Get overdue schedules
+        overdue_schedules = get_overdue_schedules(config)
 
-    return 0
+        if not overdue_schedules:
+            # No overdue schedules, exit silently
+            return 0
+
+        # Spawn the most overdue schedule
+        schedule_name, overdue_minutes = overdue_schedules[0]
+        spawn_background_job(schedule_name, args.config)
+
+        return 0
+    finally:
+        # Release lock and close file
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
 
 
 def cmd_status(config: Config) -> int:
