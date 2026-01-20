@@ -1,6 +1,6 @@
 [project]
 name = "android-sync"
-version = "0.1.0"
+version = "0.2.0"
 description = "Backup files from Android (Termux) to Backblaze B2 using rclone"
 readme = "README.md"
 requires-python = ">=3.11"
