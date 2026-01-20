@@ -5,8 +5,9 @@ import os
 import signal
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import psutil
 import pytest
 
 from android_sync.config import Config, Schedule
@@ -188,34 +189,49 @@ class TestCheckStaleJob:
 
         assert check_stale_job(state, 24) is False
 
-    def test_running_job_within_timeout(self):
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_running_job_within_timeout(self, mock_process_class):
         """Test that running job within timeout is not stale."""
+        job_start_time = datetime.now() - timedelta(hours=1)
         state = ScheduleState(
             schedule="test",
             last_run=None,
             next_run=None,
             status="running",
-            started_at=datetime.now() - timedelta(hours=1),
+            started_at=job_start_time,
             finished_at=None,
             pid=os.getpid(),
         )
 
+        # Mock process with matching start time (so PID check passes)
+        mock_proc = Mock()
+        mock_proc.create_time.return_value = job_start_time.timestamp()
+        mock_process_class.return_value = mock_proc
+
         assert check_stale_job(state, 24) is False
 
     @patch("android_sync.scheduler.psutil.pid_exists")
-    def test_running_job_beyond_timeout(self, mock_pid_exists):
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_running_job_beyond_timeout(self, mock_process_class, mock_pid_exists):
         """Test that job running beyond timeout is marked stale."""
         mock_pid_exists.return_value = True
 
+        # State says job started 25 hours ago
+        job_start_time = datetime.now() - timedelta(hours=25)
         state = ScheduleState(
             schedule="test",
             last_run=None,
             next_run=None,
             status="running",
-            started_at=datetime.now() - timedelta(hours=25),
+            started_at=job_start_time,
             finished_at=None,
             pid=12345,
         )
+
+        # Mock process with matching start time (so PID check passes)
+        mock_proc = Mock()
+        mock_proc.create_time.return_value = job_start_time.timestamp()
+        mock_process_class.return_value = mock_proc
 
         with patch("android_sync.scheduler.os.kill") as mock_kill:
             result = check_stale_job(state, 24)
@@ -255,23 +271,132 @@ class TestCheckStaleJob:
         assert check_stale_job(state, 24) is True
 
     @patch("android_sync.scheduler.psutil.pid_exists")
+    @patch("android_sync.scheduler.psutil.Process")
     @patch("android_sync.scheduler.os.kill")
-    def test_kill_handles_process_already_gone(self, mock_kill, mock_pid_exists):
+    def test_kill_handles_process_already_gone(
+        self, mock_kill, mock_process_class, mock_pid_exists
+    ):
         """Test that ProcessLookupError during kill is handled gracefully."""
         mock_pid_exists.return_value = True
         mock_kill.side_effect = ProcessLookupError
+
+        # State says job started 25 hours ago
+        job_start_time = datetime.now() - timedelta(hours=25)
+        state = ScheduleState(
+            schedule="test",
+            last_run=None,
+            next_run=None,
+            status="running",
+            started_at=job_start_time,
+            finished_at=None,
+            pid=12345,
+        )
+
+        # Mock process with matching start time
+        mock_proc = Mock()
+        mock_proc.create_time.return_value = job_start_time.timestamp()
+        mock_process_class.return_value = mock_proc
+
+        # Should not raise exception
+        result = check_stale_job(state, 24)
+        assert result is True
+
+    @patch("android_sync.scheduler.psutil.pid_exists")
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_pid_reused_by_different_process(self, mock_process_class, mock_pid_exists):
+        """Test PID hijacking mitigation - detects when PID is reused (§9.3)."""
+        mock_pid_exists.return_value = True
+
+        # State says job started 1 hour ago
+        job_start_time = datetime.now() - timedelta(hours=1)
+        state = ScheduleState(
+            schedule="test",
+            last_run=None,
+            next_run=None,
+            status="running",
+            started_at=job_start_time,
+            finished_at=None,
+            pid=12345,
+        )
+
+        # Mock process shows it started 5 minutes ago (different process!)
+        mock_proc = Mock()
+        actual_proc_start = datetime.now() - timedelta(minutes=5)
+        mock_proc.create_time.return_value = actual_proc_start.timestamp()
+        mock_process_class.return_value = mock_proc
+
+        # Should detect PID hijacking and mark as stale
+        result = check_stale_job(state, 24)
+        assert result is True
+        mock_process_class.assert_called_once_with(12345)
+
+    @patch("android_sync.scheduler.psutil.pid_exists")
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_pid_start_time_within_tolerance(self, mock_process_class, mock_pid_exists):
+        """Test that PID with matching start time (within tolerance) is not marked stale."""
+        mock_pid_exists.return_value = True
+
+        # State says job started 1 hour ago
+        job_start_time = datetime.now() - timedelta(hours=1)
+        state = ScheduleState(
+            schedule="test",
+            last_run=None,
+            next_run=None,
+            status="running",
+            started_at=job_start_time,
+            finished_at=None,
+            pid=12345,
+        )
+
+        # Mock process shows it started at same time (within 30 second tolerance)
+        mock_proc = Mock()
+        actual_proc_start = job_start_time + timedelta(seconds=30)
+        mock_proc.create_time.return_value = actual_proc_start.timestamp()
+        mock_process_class.return_value = mock_proc
+
+        # Should NOT mark as stale (same process)
+        result = check_stale_job(state, 24)
+        assert result is False
+
+    @patch("android_sync.scheduler.psutil.pid_exists")
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_pid_process_access_denied(self, mock_process_class, mock_pid_exists):
+        """Test that AccessDenied exception when checking PID is handled (§9.3)."""
+        mock_pid_exists.return_value = True
+        mock_process_class.side_effect = psutil.AccessDenied(pid=12345)
 
         state = ScheduleState(
             schedule="test",
             last_run=None,
             next_run=None,
             status="running",
-            started_at=datetime.now() - timedelta(hours=25),
+            started_at=datetime.now() - timedelta(hours=1),
             finished_at=None,
             pid=12345,
         )
 
-        # Should not raise exception
+        # Should mark as stale if we can't access the process
+        result = check_stale_job(state, 24)
+        assert result is True
+
+    @patch("android_sync.scheduler.psutil.pid_exists")
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_pid_process_no_such_process(self, mock_process_class, mock_pid_exists):
+        """Test that NoSuchProcess exception when checking PID is handled (§9.3)."""
+        mock_pid_exists.return_value = True
+        mock_process_class.side_effect = psutil.NoSuchProcess(pid=12345)
+
+        state = ScheduleState(
+            schedule="test",
+            last_run=None,
+            next_run=None,
+            status="running",
+            started_at=datetime.now() - timedelta(hours=1),
+            finished_at=None,
+            pid=12345,
+        )
+
+        # Should mark as stale if process disappeared
         result = check_stale_job(state, 24)
         assert result is True
 
@@ -408,7 +533,8 @@ class TestGetOverdueSchedules:
         assert len(overdue) == 1
         assert overdue[0][0] == "scheduled"
 
-    def test_running_jobs_skipped(self, tmp_path):
+    @patch("android_sync.scheduler.psutil.Process")
+    def test_running_jobs_skipped(self, mock_process_class, tmp_path):
         """Test that currently running jobs are not selected."""
         config = create_test_config(
             schedules={
@@ -419,13 +545,14 @@ class TestGetOverdueSchedules:
 
         now = datetime.now()
         past_time = now - timedelta(hours=1)
+        job_start = now - timedelta(minutes=10)
         states = {
             "running": ScheduleState(
                 schedule="running",
                 last_run=None,
                 next_run=past_time,
                 status="running",
-                started_at=now - timedelta(minutes=10),
+                started_at=job_start,
                 finished_at=None,
                 pid=os.getpid(),
             ),
@@ -439,6 +566,11 @@ class TestGetOverdueSchedules:
                 pid=None,
             ),
         }
+
+        # Mock process with matching start time so PID check passes
+        mock_proc = Mock()
+        mock_proc.create_time.return_value = job_start.timestamp()
+        mock_process_class.return_value = mock_proc
 
         with patch("android_sync.scheduler.get_state_directory", return_value=tmp_path):
             for state in states.values():

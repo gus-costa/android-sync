@@ -199,7 +199,7 @@
 
 - [x] **Create test file: `tests/test_scheduler.py`**
   - Reference: [Spec §8.1](scheduling.md#81-unit-tests)
-  - **STATUS:** VERIFIED - 887 lines, 70 test methods
+  - **STATUS:** VERIFIED - 1075 lines, 74 test methods (includes PID hijacking mitigation tests)
 
 - [x] **Test ScheduleState serialization**
   - Test JSON round-trip (save → load)
@@ -214,11 +214,12 @@
   - **STATUS:** VERIFIED - 4 tests in TestCalculateNextRun class
 
 - [x] **Test check_stale_job()**
-  - Mock `psutil.pid_exists()`
+  - Mock `psutil.pid_exists()` and `psutil.Process`
   - Test timeout detection
   - Test PID cleanup
   - Verify SIGTERM sent to stale jobs
-  - **STATUS:** VERIFIED - 6 tests in TestCheckStaleJob class
+  - Test PID hijacking mitigation (§9.3)
+  - **STATUS:** VERIFIED - 10 tests in TestCheckStaleJob class
 
 - [x] **Test get_overdue_schedules()**
   - Mock state files
@@ -253,7 +254,7 @@
 - [x] **Update existing tests if needed**
   - Run full test suite: `pytest tests/`
   - Fix any broken tests due to config schema changes
-  - **STATUS:** VERIFIED - All 88 tests passing (100% pass rate)
+  - **STATUS:** VERIFIED - All 93 tests passing (100% pass rate)
 
 ## Phase 7: Documentation ✅
 
@@ -347,7 +348,7 @@
 - [x] **Run full test suite**
   - `pytest tests/ -v`
   - Ensure all tests pass
-  - **STATUS:** COMPLETE - All 89 tests passing
+  - **STATUS:** COMPLETE - All 93 tests passing
 
 - [x] **Run linter**
   - `ruff check src/ tests/`
@@ -386,6 +387,35 @@ File locking has been implemented to prevent concurrent execution of the check c
 - Test count updated: 89 tests (all passing)
 
 **Priority:** HIGH - Correctness issue resolved
+
+### 2. PID Process Start Time Validation ✅
+
+**Status:** IMPLEMENTED
+**Spec Reference:** §9.3 - Security Considerations (PID Hijacking mitigation)
+**Location:** `src/android_sync/scheduler.py` - `check_stale_job()` function (lines 192-258)
+
+**Implementation:**
+- Checks if PID exists using `psutil.pid_exists()`
+- Verifies process start time matches state.started_at using `psutil.Process(pid).create_time()`
+- Allows 60 second tolerance for clock precision and process startup time
+- Handles exceptions: `psutil.NoSuchProcess` and `psutil.AccessDenied`
+- If start times don't match, marks job as stale (PID reused by different process)
+
+**Testing:**
+- Added 4 comprehensive tests in `tests/test_scheduler.py`:
+  - `test_pid_reused_by_different_process` - Verifies detection of PID hijacking
+  - `test_pid_start_time_within_tolerance` - Verifies matching start times pass
+  - `test_pid_process_access_denied` - Verifies AccessDenied exception handling
+  - `test_pid_process_no_such_process` - Verifies NoSuchProcess exception handling
+- Updated 3 existing tests to mock `psutil.Process` for compatibility
+- Total test count: 93 tests (all passing)
+
+**Impact:** Prevents rare edge case where:
+1. Job process ends and PID is reused by unrelated process
+2. Without this check, stale job detection could kill an innocent process
+3. Now safely detects PID reuse and marks job as stale without killing
+
+**Priority:** COMPLETE - Security best practice from spec §9.3 now implemented
 
 ## Key Files Modified
 

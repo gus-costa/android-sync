@@ -279,9 +279,12 @@ For example, an hourly schedule that fails will retry in 1 hour. A daily schedul
 ### Stale Job Detection
 
 If a job runs longer than the configured timeout (default: 24 hours):
-- The process is killed with SIGTERM
+- The process is verified to be the same job (using process start time)
+- If verified, the process is killed with SIGTERM
 - Status is marked as failed
 - The job will retry at its next scheduled time
+
+**Safety:** The system verifies the process ID belongs to the actual job before terminating it. This prevents accidentally killing unrelated processes if the PID is reused by the system.
 
 Configure timeout in `config.toml`:
 

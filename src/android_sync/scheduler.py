@@ -194,7 +194,8 @@ def check_stale_job(state: ScheduleState, timeout_hours: int) -> bool:
 
     Implements §5.3.1 Stale Job Detection. A job is considered stale if:
     1. PID no longer exists (crashed/killed externally)
-    2. Runtime exceeds timeout_hours (kills with SIGTERM per §9.3)
+    2. PID exists but process start time doesn't match (PID reused by different process - §9.3)
+    3. Runtime exceeds timeout_hours (kills with SIGTERM per §9.3)
 
     Stale jobs are marked as failed and follow retry behavior per §2.3.
 
@@ -216,6 +217,27 @@ def check_stale_job(state: ScheduleState, timeout_hours: int) -> bool:
     # Check if PID exists (§5.3.1 algorithm step 2)
     if not psutil.pid_exists(state.pid):
         logger.warning("Job %s PID %d no longer exists", state.schedule, state.pid)
+        return True
+
+    # Verify process start time to prevent PID hijacking (§9.3 Security Considerations)
+    # If PID was reused by a different process, mark as stale to avoid killing innocent process
+    try:
+        proc = psutil.Process(state.pid)
+        proc_start = datetime.fromtimestamp(proc.create_time())
+        # Allow 60 second tolerance for clock precision and process startup time
+        time_diff = abs((proc_start - state.started_at).total_seconds())
+        if time_diff > 60:
+            logger.warning(
+                "Job %s PID %d start time mismatch (diff: %.1fs), "
+                "PID likely reused by different process",
+                state.schedule,
+                state.pid,
+                time_diff,
+            )
+            return True
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        # Process disappeared or we can't access it
+        logger.warning("Job %s PID %d no longer accessible", state.schedule, state.pid)
         return True
 
     # Check runtime (§5.3.1 algorithm step 3)
