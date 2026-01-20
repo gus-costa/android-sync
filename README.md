@@ -4,7 +4,7 @@ Backup files from Android (Termux) to Backblaze B2 using rclone.
 
 ## Features
 
-- One-way sync from device to B2 (no deletes, preserves versions)
+- One-way sync from device to B2 with configurable removal tracking
 - Configurable sync profiles for different file types
 - Automatic time-based scheduling with cron expressions
 - Schedules to group profiles for batch execution
@@ -315,6 +315,7 @@ termux-job-scheduler list
 ```bash
 termux-job-scheduler schedule \
   --script ~/.local/share/android-sync/check-schedule.sh \
+  --job-id 1 \
   --period-ms 900000 \
   --persisted true
 ```

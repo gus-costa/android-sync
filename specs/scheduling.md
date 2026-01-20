@@ -382,6 +382,7 @@ After credential setup:
    ```bash
    termux-job-scheduler schedule \
      --script ~/.local/share/android-sync/check-schedule.sh \
+     --job-id 1 \
      --period-ms 900000 \
      --persisted true
    ```
