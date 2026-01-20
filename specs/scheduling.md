@@ -471,6 +471,17 @@ subprocess.Popen(
 - Logs to appropriate file
 - No stdin/stdout/stderr connection to parent
 
+**Log File Management:**
+- Log file: `~/logs/schedule-{schedule_name}.log`
+- Opens in append mode (`"a"`)
+- One file per schedule (all runs append to same file)
+- File mtime updated on each append
+- **Retention:** Cleaned up automatically per `log_retention_days` policy
+  - Same retention as main logs (see `specs/logging-system.md` §6.2)
+  - Active schedules continuously update mtime, avoiding deletion
+  - Inactive/abandoned schedules cleaned up when mtime exceeds retention
+  - Background jobs initialize logging, triggering cleanup
+
 #### 5.3.3 Next Run Calculation
 
 ```python
@@ -641,6 +652,10 @@ def get_overdue_schedules(config: Config) -> list[tuple[str, float]]:
 
 ## 10. Future Enhancements (Out of Scope)
 
+- **Enhanced schedule log rotation:**
+  - Size-based rotation in addition to time-based (e.g., max 10MB per file)
+  - Separate retention policy for schedule logs vs main logs
+  - Python `RotatingFileHandler` instead of simple append
 - Detailed execution history (beyond last run)
 - Dynamic schedule adjustment (e.g., delay non-critical syncs to off-peak hours)
   - Note: Basic battery/network constraints are hardcoded (see §3.1, §7.5)

@@ -297,6 +297,7 @@ log_retention_days = 7  # Default
 - Logs older than N days are deleted
 - Deletion happens at start of logging setup
 - Based on file modification time (mtime)
+- Applies to both main logs and schedule logs
 
 **Special Value:**
 ```toml
@@ -312,7 +313,9 @@ log_retention_days = 0  # Disable cleanup
 **Process:**
 ```
 1. Calculate cutoff time: now - retention_days
-2. Glob for all android-sync-*.log files in log_dir
+2. Glob for log files:
+   - android-sync-*.log (main invocation logs)
+   - schedule-*.log (background job logs)
 3. For each file:
    - Check file mtime
    - If mtime < cutoff: Delete file
@@ -322,20 +325,31 @@ log_retention_days = 0  # Disable cleanup
 **Implementation:**
 ```python
 cutoff = datetime.now() - timedelta(days=retention_days)
+
+# Clean up main logs
 for log_file in log_dir.glob("android-sync-*.log"):
     if log_file.stat().st_mtime < cutoff.timestamp():
         log_file.unlink()
+        removed += 1
+
+# Clean up schedule logs
+for log_file in log_dir.glob("schedule-*.log"):
+    if log_file.stat().st_mtime < cutoff.timestamp():
+        log_file.unlink()
+        removed += 1
 ```
 
 **When Cleanup Runs:**
 - At start of `setup_logging()`
 - Before creating new log file
 - Ensures cleanup even if process crashes
+- Also runs when background jobs start (each job calls setup_logging)
 
 **Why mtime:**
 - Simpler than parsing filename timestamp
 - Robust to clock changes
 - Standard filesystem metadata
+- Works for both timestamped files (main logs) and static names (schedule logs)
 
 ### 6.3 Retention Recommendations
 
@@ -398,8 +412,8 @@ with open(log_file, "a") as log:
 **Characteristics:**
 - File opened in append mode
 - Multiple runs accumulate in same file
-- No size limit (manual management needed)
-- No automatic cleanup (unlike main logs)
+- File mtime updated on each append
+- Cleaned up by retention policy (same as main logs, see §6.2)
 
 ### 7.3 Log Format
 
@@ -416,22 +430,45 @@ with open(log_file, "a") as log:
 2026-01-19 03:15:00 [INFO] android_sync: Sync complete: 1/1 profiles succeeded, 1250 files transferred, 10 files hidden
 ```
 
-### 7.4 Limitations
+### 7.4 Retention and Cleanup
 
-**No Automatic Cleanup:**
-- Schedule logs grow indefinitely
-- User must manually delete or rotate
-- Future enhancement: Add cleanup for schedule logs
+**Schedule Log Retention:**
+- Schedule logs follow same retention policy as main logs (§6.1)
+- Files older than `log_retention_days` are deleted automatically
+- Cleanup runs when any logging is initialized (including background jobs)
+- mtime updated on each append, ensuring active logs aren't deleted
+
+**Why Append Mode Works with Retention:**
+- Each job execution appends to schedule log, updating mtime
+- Active schedules continuously update their log files
+- Inactive schedules (not run for N days) have old mtime and get cleaned up
+- This naturally handles both old content and abandoned schedules
 
 **File Locking:**
-- Multiple jobs for same schedule could conflict
-- Scheduler prevents this (one job at a time)
-- Manual runs could conflict with scheduled runs
+- Multiple jobs for same schedule could theoretically conflict
+- Scheduler prevents this (one job at a time per scheduling.md §2.2)
+- Manual runs could conflict with scheduled runs (user responsibility)
+- OS-level append is atomic for small writes, reducing corruption risk
 
-**Recommendations:**
-- Monitor schedule log sizes
-- Manually clean up or rotate periodically
-- Consider external log rotation (logrotate)
+**Monitoring Recommendations:**
+
+1. **Check log sizes periodically:**
+   ```bash
+   du -h ~/logs/schedule-*.log
+   ```
+
+2. **Verify retention is working:**
+   ```bash
+   # List schedule logs with modification times
+   ls -lht ~/logs/schedule-*.log
+   ```
+
+3. **Manual cleanup if needed:**
+   ```bash
+   # Force cleanup by updating mtime to old date
+   touch -d "60 days ago" ~/logs/schedule-old.log
+   # Next logging init will clean it up
+   ```
 
 ## 8. What Gets Logged
 
@@ -759,9 +796,11 @@ fi
 - Real-time log streaming
 - Log file compression
 - External log rotation (logrotate integration)
-- Retention policy for schedule logs
-- Log file size limits
+- Size-based rotation for schedule logs (in addition to time-based)
+- Separate retention policy for schedule vs main logs
+- Log file size limits per file
 - Circular buffer for memory-constrained devices
+- Python `RotatingFileHandler` for schedule logs instead of append
 
 ## 15. References
 

@@ -174,7 +174,7 @@ log_dir = "/data/data/com.termux/files/home/logs/android-sync"
 
 **Range:** `>= 0`
 
-**Description:** Number of days to keep log files
+**Description:** Number of days to keep log files (applies to all logs)
 
 **Validation:**
 - Must be non-negative integer
@@ -188,7 +188,10 @@ log_retention_days = 30
 **Behavior:**
 - Cleanup runs at start of each logged command
 - Deletes logs older than N days (based on file mtime)
-- See `specs/logging-system.md` for details
+- Applies to both main logs (`android-sync-*.log`) and schedule logs (`schedule-*.log`)
+- Active schedule logs continuously update mtime and avoid deletion
+- Inactive/abandoned schedules get cleaned up automatically
+- See `specs/logging-system.md` §6 for details
 
 **Recommendations:**
 - Mobile devices: 7-14 days (limited storage)
