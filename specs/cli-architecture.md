@@ -207,6 +207,7 @@ android-sync run --all [--dry-run]
 - Preview mode
 - Shows what would be synced
 - No actual transfers
+- Does NOT update schedule state
 - Safe to run anytime
 
 **Execution Flow:**
@@ -220,7 +221,7 @@ android-sync run --all [--dry-run]
    - Single profile, or
    - All profiles
 
-4. If running schedule:
+4. If running schedule AND not dry-run:
    - Update state: status="running", set PID, started_at
 
 5. Execute each profile sequentially
@@ -230,14 +231,14 @@ android-sync run --all [--dry-run]
 
 6. Log summary (success count, files transferred)
 
-7. If running schedule:
+7. If running schedule AND not dry-run:
    - Update state: status="success"/"failed", calculate next_run
 
 8. Return exit code
 ```
 
 **State Management:**
-- Only updates state when running a schedule (not --profile or --all)
+- Only updates state when running a schedule (not --profile, --all, or --dry-run)
 - State updates wrapped in try-finally (always updates even on error)
 - State reflects last run time and next scheduled time
 
@@ -247,7 +248,7 @@ android-sync run --all [--dry-run]
 
 **Examples:**
 ```bash
-# Preview a schedule
+# Preview a schedule (no state update)
 android-sync run daily --dry-run
 
 # Run a schedule (updates state)
@@ -259,7 +260,7 @@ android-sync run --profile photos
 # Run all profiles (no state update)
 android-sync run --all
 
-# Verbose dry-run
+# Verbose dry-run (no state update)
 android-sync --verbose run daily --dry-run
 ```
 
@@ -527,6 +528,7 @@ android-sync reset photos_frequent
    - Decrypts secrets using keystore key
    - Runs sync in dry-run mode
    - Shows preview
+   - Does NOT update schedule state
 
 3. User runs: android-sync run daily
    - Updates schedule state (running)
@@ -588,7 +590,7 @@ Meanwhile:
 ### 5.1 When State is Updated
 
 **run command:**
-- Updates state ONLY when running a schedule (not --profile or --all)
+- Updates state ONLY when running a schedule (not --profile, --all, or --dry-run)
 - On start: `update_state_on_start(schedule_name, config)`
   - Sets: status="running", pid, started_at
 - On finish: `update_state_on_finish(schedule_name, config, success)`

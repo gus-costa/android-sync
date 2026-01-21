@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import psutil
 import pytest
 
-from android_sync.config import Config, Schedule
+from android_sync.config import Config, Profile, Schedule
 from android_sync.scheduler import (
     ScheduleState,
     calculate_next_run,
@@ -1073,3 +1073,162 @@ class TestIntegrationCheckCycle:
                 # Should successfully spawn job
                 assert result == 0
                 mock_spawn.assert_called_once()
+
+class TestDryRunStateIsolation:
+    """Test that dry-run mode never updates schedule state (Spec: CLI Architecture §5.1)."""
+
+    def test_dry_run_does_not_create_state_file(self, tmp_path):
+        """Test that dry-run doesn't create state file for new schedule."""
+        # Create config with actual profile
+        config = create_test_config(
+            profiles={
+                "photos": Profile(
+                    name="photos",
+                    sources=["/test/photos"],
+                    destination="photos",
+                )
+            },
+            schedules={
+                "daily": Schedule(name="daily", profiles=["photos"], cron="0 3 * * *"),
+            },
+        )
+
+        with patch("android_sync.scheduler.get_state_directory", return_value=tmp_path):
+            from android_sync.cli import cmd_run
+            from android_sync.sync import SyncResult
+
+            # Mock credentials and sync
+            mock_creds = {"key_id": "test", "application_key": "test"}
+            with patch("android_sync.cli.get_b2_credentials", return_value=mock_creds):
+                with patch("android_sync.cli.sync_profile") as mock_sync:
+                    mock_sync.return_value = SyncResult(
+                        profile_name="photos",
+                        success=True,
+                        files_transferred=10,
+                        bytes_transferred=1000,
+                        hidden_files=[]
+                    )
+
+                    mock_logger = Mock()
+                    args = Mock(schedule="daily", profile=None, all=False, dry_run=True)
+
+                    result = cmd_run(config, args, mock_logger)
+
+                    # Command should succeed
+                    assert result == 0
+
+                    # State file should NOT be created
+                    state_file = tmp_path / "daily.json"
+                    assert not state_file.exists()
+
+    def test_dry_run_does_not_modify_existing_state(self, tmp_path):
+        """Test that dry-run doesn't modify existing state file."""
+        config = create_test_config(
+            profiles={
+                "photos": Profile(
+                    name="photos",
+                    sources=["/test/photos"],
+                    destination="photos",
+                )
+            },
+            schedules={
+                "daily": Schedule(name="daily", profiles=["photos"], cron="0 3 * * *"),
+            },
+        )
+
+        with patch("android_sync.scheduler.get_state_directory", return_value=tmp_path):
+            # Create initial state
+            initial_state = ScheduleState(
+                schedule="daily",
+                last_run=datetime(2026, 1, 19, 3, 0, 0),
+                next_run=datetime(2026, 1, 20, 3, 0, 0),
+                status="success",
+                started_at=None,
+                finished_at=datetime(2026, 1, 19, 3, 5, 0),
+                pid=None,
+            )
+            save_state(initial_state)
+
+            from android_sync.cli import cmd_run
+            from android_sync.sync import SyncResult
+
+            mock_creds = {"key_id": "test", "application_key": "test"}
+            with patch("android_sync.cli.get_b2_credentials", return_value=mock_creds):
+                with patch("android_sync.cli.sync_profile") as mock_sync:
+                    mock_sync.return_value = SyncResult(
+                        profile_name="photos",
+                        success=True,
+                        files_transferred=10,
+                        bytes_transferred=1000,
+                        hidden_files=[]
+                    )
+
+                    mock_logger = Mock()
+                    args = Mock(schedule="daily", profile=None, all=False, dry_run=True)
+
+                    result = cmd_run(config, args, mock_logger)
+                    assert result == 0
+
+                    # Load state and verify it's unchanged
+                    current_state = load_state("daily", "0 3 * * *")
+                    assert current_state.status == initial_state.status
+                    assert current_state.last_run == initial_state.last_run
+                    assert current_state.next_run == initial_state.next_run
+                    assert current_state.pid is None
+
+    def test_live_run_updates_state_after_dry_run(self, tmp_path):
+        """Test that live run updates state correctly after a dry-run."""
+        config = create_test_config(
+            profiles={
+                "photos": Profile(
+                    name="photos",
+                    sources=["/test/photos"],
+                    destination="photos",
+                )
+            },
+            schedules={
+                "daily": Schedule(name="daily", profiles=["photos"], cron="0 3 * * *"),
+            },
+        )
+
+        with patch("android_sync.scheduler.get_state_directory", return_value=tmp_path):
+            from android_sync.cli import cmd_run
+            from android_sync.sync import SyncResult
+
+            mock_creds = {"key_id": "test", "application_key": "test"}
+            with patch("android_sync.cli.get_b2_credentials", return_value=mock_creds):
+                with patch("android_sync.cli.sync_profile") as mock_sync:
+                    mock_sync.return_value = SyncResult(
+                        profile_name="photos",
+                        success=True,
+                        files_transferred=10,
+                        bytes_transferred=1000,
+                        hidden_files=[]
+                    )
+
+                    mock_logger = Mock()
+
+                    # 1. First run with dry-run
+                    args_dry = Mock(schedule="daily", profile=None, all=False, dry_run=True)
+                    result = cmd_run(config, args_dry, mock_logger)
+                    assert result == 0
+
+                    # State file should not exist
+                    state_file = tmp_path / "daily.json"
+                    assert not state_file.exists()
+
+                    # 2. Now run without dry-run (live run)
+                    args_live = Mock(schedule="daily", profile=None, all=False, dry_run=False)
+                    result = cmd_run(config, args_live, mock_logger)
+                    assert result == 0
+
+                    # State file should now exist and be updated
+                    assert state_file.exists()
+
+                    # Verify state was updated correctly
+                    state = load_state("daily", "0 3 * * *")
+                    assert state.status == "success"
+                    assert state.last_run is not None
+                    assert state.next_run is not None
+                    assert state.next_run > datetime.now()
+                    assert state.pid is None
