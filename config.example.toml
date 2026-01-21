@@ -18,6 +18,10 @@ log_retention_days = 7
 # Number of parallel transfers (default: 4)
 transfers = 4
 
+# Maximum hours a job can run before being considered stale (default: 24)
+# If a scheduled job exceeds this timeout, it will be killed
+stale_job_timeout_hours = 24
+
 # Sync profiles define what to backup and where
 [profiles.photos]
 sources = [
@@ -44,10 +48,25 @@ destination = "downloads"
 exclude = ["*.tmp", "*.part", "*.crdownload"]
 
 # Schedules group profiles for batch execution
+# Schedules can include a cron expression for automatic scheduling
+# Format: minute hour day_of_month month day_of_week
+# Example cron expressions:
+#   "0 3 * * *"      - Daily at 3:00 AM
+#   "0 */6 * * *"    - Every 6 hours
+#   "30 2 * * 0"     - Every Sunday at 2:30 AM
+#   "0 0 1 * *"      - First day of month at midnight
+
 [schedules.daily]
-# Run all profiles daily
+# Run all profiles daily at 3 AM (automatically scheduled)
 profiles = ["photos", "documents", "downloads"]
+cron = "0 3 * * *"
 
 [schedules.hourly]
-# Run photos more frequently
+# Run photos every 6 hours (automatically scheduled)
 profiles = ["photos"]
+cron = "0 */6 * * *"
+
+[schedules.manual_backup]
+# Manual schedule (no cron field) - only runs when explicitly called via:
+# android-sync run manual_backup
+profiles = ["photos", "documents", "downloads"]

@@ -14,6 +14,7 @@ This specification defines a time-based scheduling system for android-sync that 
 - Work within Android's background execution constraints
 - Survive device reboots
 - Handle network failures and retry appropriately
+- Respect network and battery constraints to avoid unnecessary data usage and battery drain
 - Require zero manual intervention after initial setup
 
 ### 1.2 Non-Goals
@@ -31,6 +32,7 @@ The scheduling system uses a **periodic check pattern**:
 
 1. **JobScheduler Trigger** (every 15 minutes)
    - Android JobScheduler wakes the check script
+   - Only triggers when configured constraints are met (network, battery)
    - Persists across device reboots
 
 2. **Check Phase** (runs quickly, exits immediately)
@@ -44,6 +46,12 @@ The scheduling system uses a **periodic check pattern**:
    - Detached background process runs the sync
    - Updates state file on start and completion
    - Independent of check phase lifecycle
+
+**Constraint Handling:**
+- Network and battery constraints are enforced at the JobScheduler level
+- If constraints aren't met when a schedule is due, the check doesn't run at all
+- Job remains overdue and will be picked up on the next check cycle (within 15 minutes of constraints being satisfied)
+- No explicit retry logic needed - JobScheduler handles constraint waiting automatically
 
 ### 2.2 Priority Model
 
@@ -102,6 +110,21 @@ stale_job_timeout_hours = 24  # Optional, default: 24
   - Maximum hours a job can run before being considered stale
   - If exceeded and PID still exists, job is killed
   - Minimum: 1, Maximum: 168 (1 week)
+
+**Hardcoded Constraints:**
+
+The scheduler enforces the following constraints for all scheduled jobs (not configurable):
+
+- **Network Requirement**: Scheduled checks only run when any network connection is available (WiFi or cellular)
+  - Prevents sync attempts when device is offline
+  - Uses Android JobScheduler's `--network any` constraint
+
+- **Battery Not Low**: Scheduled checks only run when battery is not in low state
+  - Android defines "low battery" as typically below 15% charge
+  - Prevents large syncs from draining battery when already low
+  - Uses Android JobScheduler's `--battery-not-low` constraint
+
+These constraints ensure reliable, unattended operation without requiring user configuration.
 
 ### 3.2 Schedule Section
 
@@ -358,17 +381,18 @@ Schedule: manual_backup
 
 **New Behavior:**
 
-**Before execution:**
+**Before execution (if not dry-run):**
 - Call `update_state_on_start(schedule_name)`
 - This sets status, PID, started_at
 
-**After execution:**
+**After execution (if not dry-run):**
 - Call `update_state_on_finish(schedule_name, success=True/False)`
 - This updates status, calculates next_run, clears PID
 
 **Compatibility:**
 - Can still be run manually (not just from scheduler)
 - State updates happen regardless of invocation method
+- Dry-run mode (--dry-run flag) does NOT update state
 
 #### 5.2.5 Modified: `android-sync setup`
 
@@ -382,10 +406,18 @@ After credential setup:
    ```bash
    termux-job-scheduler schedule \
      --script ~/.local/share/android-sync/check-schedule.sh \
+     --job-id 1 \
      --period-ms 900000 \
-     --persisted true
+     --persisted true \
+     --network any \
+     --battery-not-low
    ```
 5. Verify registration successful
+
+**Constraints:**
+- Network and battery constraints are always enabled (hardcoded)
+- `--network any`: Job only runs when device has network connectivity
+- `--battery-not-low`: Job only runs when battery is not in low state (~15%+)
 
 **Error Handling:**
 - Check if `termux-job-scheduler` is available
@@ -534,6 +566,21 @@ def get_overdue_schedules(config: Config) -> list[tuple[str, float]]:
 - Lock file: `~/.local/share/android-sync/check.lock`
 - If locked, exit silently (next check in 15 min)
 
+### 7.5 Constraint Not Met (Network/Battery)
+
+**Scenario:** Schedule is overdue but network is unavailable or battery is low
+
+**Handling:**
+- JobScheduler prevents check script from running at all
+- No error logged (this is expected behavior)
+- Job remains in overdue state
+- When constraints are satisfied, next periodic check (within 15 minutes) will pick up the overdue job
+
+**User Visibility:**
+- `android-sync status` will show schedule as overdue
+- No indication of constraint waiting (Android JobScheduler limitation)
+- User can manually run schedule if needed: `android-sync run <schedule_name>`
+
 ## 8. Testing Strategy
 
 ### 8.1 Unit Tests
@@ -561,6 +608,8 @@ def get_overdue_schedules(config: Config) -> list[tuple[str, float]]:
 - Long-running jobs (stale detection)
 - Network failure during sync (failure handling)
 - Multiple overdue schedules (priority selection)
+- Network constraint: disable WiFi/cellular, verify check doesn't run, re-enable and verify execution
+- Battery constraint: test with battery below ~15%, verify check doesn't run, charge and verify execution
 
 ## 9. Security Considerations
 
@@ -594,7 +643,13 @@ def get_overdue_schedules(config: Config) -> list[tuple[str, float]]:
 ## 10. Future Enhancements (Out of Scope)
 
 - Detailed execution history (beyond last run)
-- Dynamic schedule adjustment based on battery/network
+- Dynamic schedule adjustment (e.g., delay non-critical syncs to off-peak hours)
+  - Note: Basic battery/network constraints are hardcoded (see §3.1, §7.5)
+  - Future: Could add smart scheduling based on usage patterns, time-of-day preferences
+- Configurable constraint options (currently hardcoded):
+  - Per-schedule constraint overrides
+  - Disable constraints for specific schedules
+  - Unmetered network requirement (WiFi-only) option
 - Multiple timezone support
 - Schedule templates
 
