@@ -381,17 +381,18 @@ Schedule: manual_backup
 
 **New Behavior:**
 
-**Before execution:**
+**Before execution (if not dry-run):**
 - Call `update_state_on_start(schedule_name)`
 - This sets status, PID, started_at
 
-**After execution:**
+**After execution (if not dry-run):**
 - Call `update_state_on_finish(schedule_name, success=True/False)`
 - This updates status, calculates next_run, clears PID
 
 **Compatibility:**
 - Can still be run manually (not just from scheduler)
 - State updates happen regardless of invocation method
+- Dry-run mode (--dry-run flag) does NOT update state
 
 #### 5.2.5 Modified: `android-sync setup`
 

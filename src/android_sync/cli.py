@@ -97,7 +97,7 @@ def main() -> int:
         "--dry-run",
         "-n",
         action="store_true",
-        help="Preview what would be synced without making changes",
+        help="Preview what would be synced without making changes (does not update schedule state)",
     )
 
     # list command
@@ -309,8 +309,9 @@ def cmd_run(config: Config, args: argparse.Namespace, logger) -> int:
         logger.error("No profiles to run")
         return 1
 
-    # Update state when running a schedule
-    if schedule_name:
+    # Update state when running a schedule (Spec: CLI Architecture §5.1)
+    # State updates only occur for scheduled runs in live mode (not dry-run)
+    if schedule_name and not args.dry_run:
         update_state_on_start(schedule_name, config)
 
     # Run sync for each profile
@@ -344,8 +345,9 @@ def cmd_run(config: Config, args: argparse.Namespace, logger) -> int:
         success = all(r.success for r in results)
         return 0 if success else 1
     finally:
-        # Update state when running a schedule
-        if schedule_name:
+        # Update state when running a schedule (Spec: CLI Architecture §5.1)
+        # State updates only occur for scheduled runs in live mode (not dry-run)
+        if schedule_name and not args.dry_run:
             update_state_on_finish(schedule_name, config, success)
 
 

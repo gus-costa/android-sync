@@ -513,6 +513,99 @@ File locking has been implemented to prevent concurrent execution of the check c
 - Manual `android-sync run` command bypasses constraints (user-initiated)
 - Future enhancement: make constraints configurable per-schedule (see Spec §10)
 
+## Phase 11: Dry-Run State Management Clarification ✅
+
+This phase ensures that dry-run mode never updates schedule state, as clarified in the specification updates.
+
+### 1. State Update Prevention for Dry-Run Mode ✅
+
+**Status:** COMPLETE
+**Spec References:**
+- CLI Architecture Spec §3.2 (run Command - Execution Flow, steps 4 & 7)
+- CLI Architecture Spec §3.2 (run Command - State Management)
+- CLI Architecture Spec §5.1 (When State is Updated)
+- Scheduling Spec §5.2.4 (Modified: android-sync run <schedule>)
+
+**Implementation Tasks:**
+
+- [x] **Verify dry-run flag handling in run command**
+  - Location: `src/android_sync/cli.py` - `cmd_run()` function (lines 280-351)
+  - `update_state_on_start()` now only called when running a schedule AND `dry_run=False` (line 314)
+  - `update_state_on_finish()` now only called when running a schedule AND `dry_run=False` (line 350)
+  - Reference: [CLI Spec §3.2 - Execution Flow](cli-architecture.md#32-run-command)
+  - Reference: [Scheduling Spec §5.2.4](scheduling.md#524-modified-android-sync-run-schedule)
+  - **STATUS:** VERIFIED
+
+- [x] **Add conditional check for state updates**
+  - Modified state update calls to check both schedule execution AND dry-run flag
+  - Pattern implemented: `if schedule_name and not args.dry_run:`
+  - Both `update_state_on_start()` and `update_state_on_finish()` calls wrapped
+  - Added spec reference comments (Spec: CLI Architecture §5.1)
+  - Reference: [CLI Spec §5.1 - When State is Updated](cli-architecture.md#51-when-state-is-updated)
+  - **STATUS:** COMPLETE
+
+### 2. Testing for Dry-Run State Isolation ✅
+
+**Status:** COMPLETE
+**Spec Reference:** CLI Architecture Spec §3.2 (Examples - dry-run with no state update)
+
+**Implementation Tasks:**
+
+- [x] **Add unit test for dry-run state isolation**
+  - Location: `tests/test_scheduler.py` - New class `TestDryRunStateIsolation`
+  - Created 4 comprehensive tests:
+    - `test_dry_run_does_not_create_state_file` - Verifies no state file created
+    - `test_dry_run_does_not_modify_existing_state` - Verifies existing state unchanged
+    - `test_live_run_updates_state_after_dry_run` - Verifies live run updates state
+    - `test_dry_run_with_profile_flag` - Verifies --profile with dry-run behavior
+  - All tests verify state file behavior before and after dry-run
+  - Reference: [CLI Spec §3.2 - State Management](cli-architecture.md#32-run-command)
+  - **STATUS:** COMPLETE - All 4 tests passing
+
+- [x] **Add integration test for dry-run + live run sequence**
+  - Test implemented: `test_live_run_updates_state_after_dry_run`
+  - Test sequence: dry-run (state not created) → live run (state created and updated)
+  - Verifies state only updates after live run, not dry-run
+  - **STATUS:** COMPLETE
+
+### 3. Documentation Updates ✅
+
+**Status:** COMPLETE
+**Spec Reference:** CLI Architecture Spec §3.2 (Examples), §4.1 (Setup → Run Flow)
+
+**Implementation Tasks:**
+
+- [x] **Update inline code comments**
+  - Location: `src/android_sync/cli.py` - state update sections (lines 312-314, 347-350)
+  - Added comments explaining dry-run exclusion from state updates
+  - Comments reference spec: "Spec: CLI Architecture §5.1"
+  - Comments explain: "State updates only occur for scheduled runs in live mode (not dry-run)"
+  - **STATUS:** COMPLETE
+
+- [x] **Verify README examples clarity**
+  - README.md already includes dry-run examples in §3.2 (CLI Architecture Spec)
+  - "Automatic Scheduling" section already clarifies state management behavior
+  - Dry-run behavior is implicitly clear from existing documentation
+  - **STATUS:** VERIFIED - No changes needed
+
+- [x] **Update help text for run command**
+  - Location: `src/android_sync/cli.py` - argparse setup (lines 96-101)
+  - Updated `--dry-run` flag help text to: "Preview what would be synced without making changes (does not update schedule state)"
+  - Reference: [CLI Spec §3.2 - --dry-run description](cli-architecture.md#32-run-command)
+  - **STATUS:** COMPLETE
+
+---
+
+**Phase 11 Summary:**
+- All implementation tasks completed
+- 4 new tests added for dry-run state isolation (all passing)
+- Code changes: 2 conditionals added to prevent state updates during dry-run
+- Documentation: Inline comments and help text updated with spec references
+- Linting: All checks passing
+- Test results: Dry-run functionality fully tested and verified
+
+---
+
 ## Key Files Modified
 
 - `pyproject.toml` - Dependencies and version ✅
