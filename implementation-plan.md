@@ -4,7 +4,7 @@
 
 This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to match the retention policy applied to main logs. This closes the gap between specification and implementation as identified in the gap analysis.
 
-**Status:** NOT IMPLEMENTED
+**Status:** IMPLEMENTED
 **Priority:** MEDIUM-HIGH (required for long-running unattended operation)
 
 ---
@@ -17,17 +17,17 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 **Required Changes:**
 
-- [ ] Extend `cleanup_old_logs()` to glob both `android-sync-*.log` AND `schedule-*.log` files
-- [ ] Apply same cutoff logic (mtime-based) to both file types
-- [ ] Track removed count for both types in return value or logging
+- [x] Extend `cleanup_old_logs()` to glob both `android-sync-*.log` AND `schedule-*.log` files
+- [x] Apply same cutoff logic (mtime-based) to both file types
+- [x] Track removed count for both types in return value or logging
 
 **Specification Quote:**
 > "Process: 1. Calculate cutoff time: now - retention_days; 2. Glob for log files: android-sync-*.log (main invocation logs), schedule-*.log (background job logs); 3. For each file: Check file mtime, If mtime < cutoff: Delete file"
 
 **Testing:**
 
-- [ ] Unit test: Create old `schedule-*.log` files, verify cleanup
-- [ ] Unit test: Create recent `schedule-*.log` files, verify retention
+- [x] Unit test: Create old `schedule-*.log` files, verify cleanup
+- [x] Unit test: Create recent `schedule-*.log` files, verify retention
 - [ ] Integration test: Run scheduled jobs, verify mtime updates prevent cleanup
 - [ ] Integration test: Verify abandoned schedule logs (old mtime) get cleaned up
 
@@ -41,17 +41,17 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 ### 2.1 `src/android_sync/logging.py`
 
-- [ ] Update `cleanup_old_logs()` docstring to mention both file types
-- [ ] Add reference to specification section: `specs/logging-system.md §6.2`
-- [ ] Update module-level docstring if it mentions log retention
+- [x] Update `cleanup_old_logs()` docstring to mention both file types
+- [x] Add reference to specification section: `specs/logging-system.md §6.2`
+- [x] Update module-level docstring if it mentions log retention
 
 ### 2.2 `src/android_sync/scheduler.py`
 
 **Current Code Location:** `src/android_sync/scheduler.py:320-343` (function `spawn_background_job`)
 
-- [ ] Update comment at line 332 where schedule log file is created
-- [ ] Add comment explaining retention behavior (mtime-based cleanup)
-- [ ] Reference specification: `specs/logging-system.md §7.4`
+- [x] Update comment at line 332 where schedule log file is created
+- [x] Add comment explaining retention behavior (mtime-based cleanup)
+- [x] Reference specification: `specs/logging-system.md §7.4`
 
 **Specification Quote:**
 > "Schedule logs follow same retention policy as main logs (§6.1). Files older than log_retention_days are deleted automatically. Cleanup runs when any logging is initialized (including background jobs). mtime updated on each append, ensuring active logs aren't deleted."
@@ -99,19 +99,19 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 **New Test Cases Needed:**
 
-- [ ] `test_cleanup_old_logs_includes_schedule_logs`
+- [x] `test_cleanup_old_logs_includes_schedule_logs`
   - Create mix of old and new `android-sync-*.log` files
   - Create mix of old and new `schedule-*.log` files
   - Run cleanup with retention_days=7
   - Assert only old files (both types) are deleted
 
-- [ ] `test_cleanup_schedule_logs_respects_retention`
+- [x] `test_cleanup_schedule_logs_respects_retention`
   - Create `schedule-daily.log` with old mtime
   - Create `schedule-frequent.log` with recent mtime
   - Run cleanup with retention_days=7
   - Assert old file deleted, recent file retained
 
-- [ ] `test_cleanup_disabled_keeps_schedule_logs`
+- [x] `test_cleanup_disabled_keeps_schedule_logs`
   - Create old `schedule-*.log` files
   - Run cleanup with retention_days=0
   - Assert no files deleted
@@ -206,20 +206,20 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 Before merging:
 
-- [ ] Implementation matches specification exactly
-  - [ ] Both `android-sync-*.log` and `schedule-*.log` are globbed
-  - [ ] Same cutoff logic applied to both
-  - [ ] Spec references added to code comments
+- [x] Implementation matches specification exactly
+  - [x] Both `android-sync-*.log` and `schedule-*.log` are globbed
+  - [x] Same cutoff logic applied to both
+  - [x] Spec references added to code comments
 
-- [ ] Tests pass
-  - [ ] All existing tests still pass
-  - [ ] New unit tests for schedule log cleanup pass
+- [x] Tests pass
+  - [x] All existing tests still pass
+  - [x] New unit tests for schedule log cleanup pass
   - [ ] Integration tests verify mtime behavior
 
-- [ ] Documentation updated
-  - [ ] Docstrings reference spec sections
-  - [ ] Code comments explain retention behavior
-  - [ ] No contradictory comments remain
+- [x] Documentation updated
+  - [x] Docstrings reference spec sections
+  - [x] Code comments explain retention behavior
+  - [x] No contradictory comments remain
 
 - [ ] Manual testing completed
   - [ ] Active schedule logs NOT deleted
@@ -250,14 +250,14 @@ This implementation satisfies the following specification sections:
 
 Implementation is complete when:
 
-1. ✅ `cleanup_old_logs()` globs both `android-sync-*.log` AND `schedule-*.log`
-2. ✅ All tests pass (existing + new)
-3. ✅ Manual testing confirms:
-   - Active schedule logs are NOT deleted (mtime stays fresh)
-   - Inactive schedule logs ARE deleted (old mtime triggers cleanup)
-   - Both log types follow same retention policy
-4. ✅ Code comments reference specification sections
-5. ✅ Specs and implementation are aligned (no gaps)
+1. ✅ `cleanup_old_logs()` globs both `android-sync-*.log` AND `schedule-*.log` - DONE
+2. ✅ All tests pass (existing + new) - DONE (104 tests passing)
+3. ⚠️  Manual testing confirms:
+   - Active schedule logs are NOT deleted (mtime stays fresh) - PENDING
+   - Inactive schedule logs ARE deleted (old mtime triggers cleanup) - PENDING
+   - Both log types follow same retention policy - VERIFIED IN UNIT TESTS
+4. ✅ Code comments reference specification sections - DONE
+5. ✅ Specs and implementation are aligned (no gaps) - DONE
 
 ---
 
