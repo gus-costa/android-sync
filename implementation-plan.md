@@ -28,8 +28,8 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 - [x] Unit test: Create old `schedule-*.log` files, verify cleanup
 - [x] Unit test: Create recent `schedule-*.log` files, verify retention
-- [ ] Integration test: Run scheduled jobs, verify mtime updates prevent cleanup
-- [ ] Integration test: Verify abandoned schedule logs (old mtime) get cleaned up
+- [x] Integration test: Run scheduled jobs, verify mtime updates prevent cleanup
+- [x] Integration test: Verify abandoned schedule logs (old mtime) get cleaned up
 
 ---
 
@@ -120,14 +120,14 @@ This plan implements automatic cleanup for schedule logs (`schedule-*.log`) to m
 
 **New Test Cases Needed:**
 
-- [ ] `test_schedule_log_mtime_updates_on_run`
+- [x] `test_schedule_log_mtime_updates_on_run`
   - Create schedule log file with old mtime
   - Run scheduled job (which appends to log)
   - Assert mtime is now recent
   - Run cleanup with short retention
   - Assert file NOT deleted (mtime was updated)
 
-- [ ] `test_abandoned_schedule_logs_cleaned_up`
+- [x] `test_abandoned_schedule_logs_cleaned_up`
   - Create `schedule-abandoned.log` with old mtime
   - Run cleanup with retention_days=7
   - Assert file is deleted
@@ -214,7 +214,7 @@ Before merging:
 - [x] Tests pass
   - [x] All existing tests still pass
   - [x] New unit tests for schedule log cleanup pass
-  - [ ] Integration tests verify mtime behavior
+  - [x] Integration tests verify mtime behavior
 
 - [x] Documentation updated
   - [x] Docstrings reference spec sections
@@ -251,11 +251,11 @@ This implementation satisfies the following specification sections:
 Implementation is complete when:
 
 1. ✅ `cleanup_old_logs()` globs both `android-sync-*.log` AND `schedule-*.log` - DONE
-2. ✅ All tests pass (existing + new) - DONE (104 tests passing)
-3. ⚠️  Manual testing confirms:
-   - Active schedule logs are NOT deleted (mtime stays fresh) - PENDING
-   - Inactive schedule logs ARE deleted (old mtime triggers cleanup) - PENDING
-   - Both log types follow same retention policy - VERIFIED IN UNIT TESTS
+2. ✅ All tests pass (existing + new) - DONE (106 tests passing)
+3. ✅ Integration tests confirm:
+   - Active schedule logs are NOT deleted (mtime stays fresh) - VERIFIED IN INTEGRATION TESTS
+   - Inactive schedule logs ARE deleted (old mtime triggers cleanup) - VERIFIED IN INTEGRATION TESTS
+   - Both log types follow same retention policy - VERIFIED IN UNIT AND INTEGRATION TESTS
 4. ✅ Code comments reference specification sections - DONE
 5. ✅ Specs and implementation are aligned (no gaps) - DONE
 
@@ -267,11 +267,11 @@ Summary of all files requiring changes:
 
 | File | Change Type | Lines | Description |
 |------|-------------|-------|-------------|
-| `src/android_sync/logging.py` | Code | ~75-80 | Add second glob for `schedule-*.log` |
-| `src/android_sync/logging.py` | Docs | ~59-68 | Update docstring |
-| `src/android_sync/scheduler.py` | Docs | ~320-330 | Update docstring and comments |
-| `tests/test_logging.py` | Tests | New | Add 3-4 test cases |
-| `tests/test_scheduler.py` | Tests | New | Add 2 integration tests |
+| `src/android_sync/logging.py` | Code | ~75-80 | Add second glob for `schedule-*.log` ✅ |
+| `src/android_sync/logging.py` | Docs | ~59-68 | Update docstring ✅ |
+| `src/android_sync/scheduler.py` | Docs | ~320-330 | Update docstring and comments ✅ |
+| `tests/test_logging.py` | Tests | New | Add 3-4 test cases ✅ |
+| `tests/test_scheduler.py` | Tests | New | Add 2 integration tests ✅ |
 
 **No changes needed:**
 - Configuration schema (already correct)
