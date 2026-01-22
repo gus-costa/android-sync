@@ -1232,3 +1232,90 @@ class TestDryRunStateIsolation:
                     assert state.next_run is not None
                     assert state.next_run > datetime.now()
                     assert state.pid is None
+
+
+class TestScheduleLogRetention:
+    """Integration tests for schedule log retention behavior (specs/logging-system.md §7.4)."""
+
+    def test_schedule_log_mtime_updates_on_run(self, tmp_path):
+        """Test that running a scheduled job updates the log's mtime.
+
+        This verifies that active schedules won't have their logs deleted by the
+        retention policy, since mtime is updated on each append operation.
+
+        Specification Reference: specs/logging-system.md §7.4
+        Implementation Reference: implementation-plan.md §5.2
+        """
+        from android_sync.logging import cleanup_old_logs
+
+        # Create a schedule log file with old mtime
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        schedule_log = log_dir / "schedule-test.log"
+        schedule_log.write_text("Initial log content\n")
+
+        # Set mtime to 10 days ago
+        import os
+        old_time = (datetime.now() - timedelta(days=10)).timestamp()
+        os.utime(schedule_log, (old_time, old_time))
+
+        # Verify the old mtime was set
+        initial_mtime = schedule_log.stat().st_mtime
+        assert initial_mtime == old_time
+
+        # Simulate a scheduled job appending to the log
+        # (In real usage, spawn_background_job opens the file in append mode)
+        import time
+        time.sleep(0.1)  # Ensure time passes for mtime difference
+        with open(schedule_log, "a") as log:
+            log.write("New log entry from scheduled run\n")
+
+        # Verify mtime was updated to recent time
+        updated_mtime = schedule_log.stat().st_mtime
+        assert updated_mtime > initial_mtime
+        assert updated_mtime > (datetime.now() - timedelta(seconds=5)).timestamp()
+
+        # Run cleanup with short retention (7 days)
+        # The file should NOT be deleted because mtime is now recent
+        removed = cleanup_old_logs(log_dir, retention_days=7)
+
+        # Assert file was NOT deleted (mtime was updated by append)
+        assert removed == 0
+        assert schedule_log.exists()
+        assert "New log entry" in schedule_log.read_text()
+
+    def test_abandoned_schedule_logs_cleaned_up(self, tmp_path):
+        """Test that abandoned schedule logs (old mtime) are cleaned up.
+
+        This verifies that inactive schedules (not run for N days) have old mtime
+        and get cleaned up by the retention policy.
+
+        Specification Reference: specs/logging-system.md §7.4
+        Implementation Reference: implementation-plan.md §5.2
+        """
+        from android_sync.logging import cleanup_old_logs
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create abandoned schedule log with old mtime
+        abandoned_log = log_dir / "schedule-abandoned.log"
+        abandoned_log.write_text("Old log content from inactive schedule\n")
+
+        # Set mtime to 10 days ago (beyond retention period)
+        import os
+        old_time = (datetime.now() - timedelta(days=10)).timestamp()
+        os.utime(abandoned_log, (old_time, old_time))
+
+        # Create a recent schedule log that should be kept
+        active_log = log_dir / "schedule-active.log"
+        active_log.write_text("Recent log content from active schedule\n")
+        # Leave mtime as current (just created)
+
+        # Run cleanup with retention_days=7
+        removed = cleanup_old_logs(log_dir, retention_days=7)
+
+        # Assert only the abandoned log was deleted
+        assert removed == 1
+        assert not abandoned_log.exists()
+        assert active_log.exists()

@@ -1,4 +1,15 @@
-"""Logging configuration with file and stdout output."""
+"""Logging configuration with file and stdout output.
+
+This module implements the logging system as specified in specs/logging-system.md.
+It provides dual output (file + console), automatic log retention management, and
+support for both main invocation logs and background job logs.
+
+Key features:
+- Timestamped log files: android-sync-YYYYMMDD-HHMMSS.log
+- Schedule log files: schedule-*.log (append mode)
+- Automatic cleanup based on retention policy (specs/logging-system.md §6)
+- mtime-based retention (active logs continuously update mtime)
+"""
 
 import logging
 from datetime import datetime, timedelta
@@ -15,9 +26,13 @@ def setup_logging(
 ) -> logging.Logger:
     """Configure logging to both file and stdout.
 
+    Cleans up old log files (both main and schedule logs) before creating
+    a new timestamped log file. See specs/logging-system.md §6 for retention
+    policy details.
+
     Args:
         log_dir: Directory to store log files.
-        retention_days: Number of days to keep log files.
+        retention_days: Number of days to keep log files (both types).
         verbose: If True, set log level to DEBUG.
 
     Returns:
@@ -59,12 +74,18 @@ def setup_logging(
 def cleanup_old_logs(log_dir: Path, retention_days: int) -> int:
     """Remove log files older than retention_days.
 
+    Cleans up both main invocation logs (android-sync-*.log) and background
+    job logs (schedule-*.log) based on file modification time. Active schedules
+    continuously update their log file mtime and avoid deletion.
+
+    Specification Reference: specs/logging-system.md §6.2 Cleanup Algorithm
+
     Args:
         log_dir: Directory containing log files.
-        retention_days: Number of days to keep logs.
+        retention_days: Number of days to keep logs. Set to 0 to disable cleanup.
 
     Returns:
-        Number of files removed.
+        Number of files removed (both log types combined).
     """
     if retention_days <= 0:
         return 0
@@ -72,7 +93,15 @@ def cleanup_old_logs(log_dir: Path, retention_days: int) -> int:
     cutoff = datetime.now() - timedelta(days=retention_days)
     removed = 0
 
+    # Clean up main invocation logs (specs/logging-system.md §6.2)
     for log_file in log_dir.glob("android-sync-*.log"):
+        if log_file.stat().st_mtime < cutoff.timestamp():
+            log_file.unlink()
+            removed += 1
+
+    # Clean up schedule logs (specs/logging-system.md §7.4)
+    # mtime updated on each append, ensuring active schedules aren't deleted
+    for log_file in log_dir.glob("schedule-*.log"):
         if log_file.stat().st_mtime < cutoff.timestamp():
             log_file.unlink()
             removed += 1
