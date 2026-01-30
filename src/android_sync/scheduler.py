@@ -323,12 +323,19 @@ def spawn_background_job(schedule_name: str, config_path: Path) -> None:
     Implements §5.3.2 Background Job Spawning. Creates a fully detached process
     that survives parent exit (§2.1 Execution Phase). Logs to file for debugging.
 
+    Schedule logs follow same retention policy as main logs (specs/logging-system.md
+    §7.4). Files older than log_retention_days are deleted automatically when any
+    logging is initialized. mtime updated on each append, ensuring active schedules
+    aren't deleted.
+
     Args:
         schedule_name: Name of schedule to run
         config_path: Path to configuration file
     """
     log_dir = Path.home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
+    # Schedule log file: opened in append mode (§7.2), mtime updated on each run
+    # Retention: cleaned up by cleanup_old_logs() if mtime exceeds log_retention_days (§7.4)
     log_file = log_dir / f"schedule-{schedule_name}.log"
 
     with open(log_file, "a") as log:
